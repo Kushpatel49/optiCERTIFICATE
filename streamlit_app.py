@@ -8,6 +8,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement, parse_xml
 import io
+import requests
 
 # CA Partner Details
 CA_PARTNERS = {
@@ -362,6 +363,34 @@ def add_table_with_borders(doc, rows, cols):
     table.style = 'Table Grid'
     table.autofit = True  # Set layout to autofit content
     return table
+
+def fetch_exchange_rate(currency: str) -> float:
+    """Fetch real-time exchange rate from INR to the specified currency"""
+    try:
+        # Using exchangerate-api.com free endpoint (no API key required)
+        url = f"https://api.exchangerate-api.com/v4/latest/INR"
+        response = requests.get(url, timeout=5)
+        
+        if response.status_code == 200:
+            data = response.json()
+            rates = data.get('rates', {})
+            
+            # Get the rate for the selected currency
+            if currency in rates:
+                # Rate is how many units of foreign currency = 1 INR
+                # We need: how many INR = 1 foreign currency
+                # So we need to invert: 1 / rate
+                rate = 1.0 / rates[currency]
+                return round(rate, 2)
+            else:
+                st.warning(f"Currency {currency} not found in exchange rates. Using default rate.")
+                return None
+        else:
+            st.warning("Unable to fetch exchange rates. Using default rate.")
+            return None
+    except Exception as e:
+        st.warning(f"Error fetching exchange rate: {str(e)}. Using default rate.")
+        return None
 
 def generate_networth_certificate(data: NetWorthData) -> Document:
     """Generate the complete Net Worth Certificate document"""
@@ -1759,18 +1788,69 @@ def main():
             )
             
             st.subheader("Currency Settings")
-            st.session_state.data.foreign_currency = st.selectbox(
+            
+            # Track previous currency to detect changes
+            if 'previous_currency' not in st.session_state:
+                st.session_state.previous_currency = st.session_state.data.foreign_currency
+            
+            # Currency selection
+            currency_options = ["CAD", "USD", "EUR", "GBP", "AUD", "JPY", "CHF", "NZD", "SGD", "HKD"]
+            current_currency = st.session_state.data.foreign_currency
+            default_index = currency_options.index(current_currency) if current_currency in currency_options else 0
+            
+            selected_currency = st.selectbox(
                 "Foreign Currency",
-                ["CAD", "USD", "EUR", "GBP", "AUD"],
-                index=0
+                currency_options,
+                index=default_index,
+                key="currency_selectbox"
             )
-            st.session_state.data.exchange_rate = st.number_input(
-                f"Exchange Rate (INR to 1 {st.session_state.data.foreign_currency})",
-                min_value=0.01,
-                value=63.34,
-                step=0.01,
-                format="%.2f"
-            )
+            st.session_state.data.foreign_currency = selected_currency
+            
+            # Auto-fetch exchange rate when currency changes
+            col1_rate, col2_rate = st.columns([3, 1])
+            
+            with col1_rate:
+                # Check if currency changed
+                currency_changed = st.session_state.previous_currency != selected_currency
+                
+                # Initialize exchange rate if not set
+                if not hasattr(st.session_state.data, 'exchange_rate') or st.session_state.data.exchange_rate == 0:
+                    st.session_state.data.exchange_rate = 63.34  # Default rate
+                
+                # Auto-fetch when currency changes
+                if currency_changed:
+                    # Fetch real-time exchange rate
+                    with st.spinner(f"Fetching real-time exchange rate for {selected_currency}..."):
+                        fetched_rate = fetch_exchange_rate(selected_currency)
+                        if fetched_rate:
+                            st.session_state.data.exchange_rate = fetched_rate
+                            st.session_state.previous_currency = selected_currency
+                            st.success(f"✅ Exchange rate updated: {fetched_rate} INR = 1 {selected_currency}")
+                        else:
+                            st.info(f"Using current rate: {st.session_state.data.exchange_rate} INR = 1 {selected_currency}")
+                
+                # Exchange rate input (editable)
+                st.session_state.data.exchange_rate = st.number_input(
+                    f"Exchange Rate (INR to 1 {selected_currency})",
+                    min_value=0.01,
+                    value=st.session_state.data.exchange_rate,
+                    step=0.01,
+                    format="%.2f",
+                    key="exchange_rate_input"
+                )
+            
+            with col2_rate:
+                st.markdown("<br>", unsafe_allow_html=True)  # Spacing
+                if st.button("🔄 Refresh Rate", help="Fetch latest exchange rate", key="refresh_rate_btn"):
+                    with st.spinner(f"Fetching latest rate for {selected_currency}..."):
+                        fetched_rate = fetch_exchange_rate(selected_currency)
+                        if fetched_rate:
+                            st.session_state.data.exchange_rate = fetched_rate
+                            st.session_state.previous_currency = selected_currency
+                            st.rerun()
+                        else:
+                            st.warning("Could not fetch rate. Please enter manually.")
+            
             st.session_state.exchange_rate = st.session_state.data.exchange_rate
         
         st.markdown("---")
