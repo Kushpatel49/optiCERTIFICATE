@@ -6,7 +6,7 @@ from docx import Document
 from docx.shared import Pt, Inches, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
-from docx.oxml import OxmlElement
+from docx.oxml import OxmlElement, parse_xml
 import io
 
 # CA Partner Details
@@ -171,6 +171,7 @@ class NetWorthData:
     engagement_date: str
     embassy_name: str
     embassy_address: str
+    passport_number: str = ""
     foreign_currency: str = "CAD"
     exchange_rate: float = 63.34
     
@@ -374,7 +375,11 @@ def generate_networth_certificate(data: NetWorthData) -> Document:
     
     # Title
     title = doc.add_paragraph()
-    title_run = title.add_run("Independent Practitioner's Certificate on Net Worth where no Books of\\nAccount have been maintained (For VISA Application Purpose)")
+    title_run = title.add_run("Independent Practitioner's Certificate on Net Worth where no Books of")
+    title_run.bold = True
+    title_run.underline = True
+    title_run.add_break()
+    title_run = title.add_run("Account have been maintained (For VISA Application Purpose)")
     title_run.bold = True
     title_run.underline = True
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -382,22 +387,33 @@ def generate_networth_certificate(data: NetWorthData) -> Document:
     doc.add_paragraph()
     
     # To Address
-    doc.add_paragraph('To')
-    doc.add_paragraph(data.embassy_name)
+    to_para = doc.add_paragraph('To')
+    to_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
+    embassy_para = doc.add_paragraph(data.embassy_name)
+    embassy_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
     embassy_lines = data.embassy_address.split('\n')
     for line in embassy_lines:
-        doc.add_paragraph(line)
+        line_para = doc.add_paragraph(line)
+        line_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     
     doc.add_paragraph()
     
     # Certificate Body
     para = doc.add_paragraph()
-    run = para.add_run("Independent Practitioner's Certificate on Net Worth where no Books of\\nAccount have been maintained (For VISA Application Purpose)")
+    run = para.add_run("Independent Practitioner's Certificate on Net Worth where no Books of")
+    run.underline = True
+    run.add_break()
+    run = para.add_run("Account have been maintained (For VISA Application Purpose)")
     run.underline = True
     
-    doc.add_paragraph(f'1. This Certificate is issued in accordance with the terms of my/our engagement letter/agreement dated {data.engagement_date}.')
+    cert_para1 = doc.add_paragraph(f'1. This Certificate is issued in accordance with the terms of my/our engagement letter/agreement dated {data.engagement_date}.')
+    cert_para1.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     
-    doc.add_paragraph(f'2. I/we have been engaged by Mr./Ms. {data.individual_name} (hereinafter referred to as the "individual") having residential address at {data.individual_address} to certify the Net Worth as at {data.certificate_date} for submission to {data.embassy_name} for VISA application purpose.')
+    name_with_passport = f"{data.individual_name} (Passport No.: {data.passport_number})" if data.passport_number else data.individual_name
+    cert_para2 = doc.add_paragraph(f'2. I/we have been engaged by Mr./Ms. {name_with_passport} (hereinafter referred to as the "individual") having residential address at {data.individual_address} to certify the Net Worth as at {data.certificate_date} for submission to {data.embassy_name} for VISA application purpose.')
+    cert_para2.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     
     # Individual's Responsibility
     para = doc.add_paragraph()
@@ -405,7 +421,8 @@ def generate_networth_certificate(data: NetWorthData) -> Document:
     run.bold = True
     run.underline = True
     
-    doc.add_paragraph(f'3. The preparation and presentation of the Statement of Net Worth ("the Statement") as at {data.certificate_date} are the responsibility of the individual, including the preparation and maintenance of all relevant supporting records and documents. This responsibility includes the design, implementation and maintenance of adequate internal controls relevant to the accuracy and completeness of the Statement.')
+    resp_para = doc.add_paragraph(f'3. The preparation and presentation of the Statement of Net Worth ("the Statement") as at {data.certificate_date} are the responsibility of the individual, including the preparation and maintenance of all relevant supporting records and documents. This responsibility includes the design, implementation and maintenance of adequate internal controls relevant to the accuracy and completeness of the Statement.')
+    resp_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     
     # Practitioner's Responsibility
     para = doc.add_paragraph()
@@ -413,11 +430,14 @@ def generate_networth_certificate(data: NetWorthData) -> Document:
     run.bold = True
     run.underline = True
     
-    doc.add_paragraph(f'4. It is my/our responsibility to examine the Statement of Net Worth prepared by the individual as at {data.certificate_date} and to certify whether the same is based on relevant supporting records and documents as made available to us.')
+    prac_para = doc.add_paragraph(f'4. It is my/our responsibility to examine the Statement of Net Worth prepared by the individual as at {data.certificate_date} and to certify whether the same is based on relevant supporting records and documents as made available to us.')
+    prac_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     
-    doc.add_paragraph('5. I/we conducted my/our examination of the Statement in accordance with the Guidance Note on Reports or Certificates for Special Purposes (Revised 2016) issued by the Institute of Chartered Accountants of India ("ICAI"). The Guidance Note requires that I/we comply with the ethical requirements of the Code of Ethics issued by ICAI.')
+    guide_para = doc.add_paragraph('5. I/we conducted my/our examination of the Statement in accordance with the Guidance Note on Reports or Certificates for Special Purposes (Revised 2016) issued by the Institute of Chartered Accountants of India ("ICAI"). The Guidance Note requires that I/we comply with the ethical requirements of the Code of Ethics issued by ICAI.')
+    guide_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     
-    doc.add_paragraph('6. I/we have complied with the relevant applicable requirements of the Standard on Quality Control (SQC) 1, Quality Control for Firms that Perform Audits and Reviews of Historical Financial Information, and Other Assurance and Related Services Engagements.')
+    sqc_para = doc.add_paragraph('6. I/we have complied with the relevant applicable requirements of the Standard on Quality Control (SQC) 1, Quality Control for Firms that Perform Audits and Reviews of Historical Financial Information, and Other Assurance and Related Services Engagements.')
+    sqc_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     
     # Opinion
     para = doc.add_paragraph()
@@ -425,7 +445,9 @@ def generate_networth_certificate(data: NetWorthData) -> Document:
     run.bold = True
     run.underline = True
     
-    doc.add_paragraph(f'7. Based on my/our examination as above and the information and explanations given to me/us, I/we certify that the Statement of Net Worth of Mr./Ms. {data.individual_name} as at {data.certificate_date} annexed herewith shows a Net Worth of Rs. {data.net_worth_inr:,.2f} (Rupees {convert_to_words(data.net_worth_inr)} only) which has been computed on the basis of the details, representations, and documents made available to me/us by the individual.')
+    name_with_passport = f"{data.individual_name} (Passport No.: {data.passport_number})" if data.passport_number else data.individual_name
+    opinion_para = doc.add_paragraph(f'7. Based on my/our examination as above and the information and explanations given to me/us, I/we certify that the Statement of Net Worth of Mr./Ms. {name_with_passport} as at {data.certificate_date} annexed herewith shows a Net Worth of Rs. {data.net_worth_inr:,.2f} (Rupees {convert_to_words(data.net_worth_inr)} only) which has been computed on the basis of the details, representations, and documents made available to me/us by the individual.')
+    opinion_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     
     # Restriction on Use
     para = doc.add_paragraph()
@@ -433,27 +455,64 @@ def generate_networth_certificate(data: NetWorthData) -> Document:
     run.bold = True
     run.underline = True
     
-    doc.add_paragraph(f'8. This Certificate has been issued at the request of the individual for submission to {data.embassy_name} for VISA application purpose. This Certificate should not be used for any other purpose or by any person other than the addressee of this Certificate. Accordingly, I/we do not accept or assume any liability or any duty of care for any other purpose or to any other person to whom this Certificate is shown or into whose hands it may come without my/our prior consent in writing.')
+    restrict_para = doc.add_paragraph(f'8. This Certificate has been issued at the request of the individual for submission to {data.embassy_name} for VISA application purpose. This Certificate should not be used for any other purpose or by any person other than the addressee of this Certificate. Accordingly, I/we do not accept or assume any liability or any duty of care for any other purpose or to any other person to whom this Certificate is shown or into whose hands it may come without my/our prior consent in writing.')
+    restrict_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     
     doc.add_paragraph()
     doc.add_paragraph()
     
     # Signature Block
-    doc.add_paragraph(f'FOR {data.ca_firm_name.upper()}')
-    doc.add_paragraph('CHARTERED ACCOUNTANTS')
-    doc.add_paragraph(f"FRN: {data.ca_frn}")
+    firm_para = doc.add_paragraph(f'FOR {data.ca_firm_name.upper()}')
+    firm_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
+    ca_para = doc.add_paragraph('CHARTERED ACCOUNTANTS')
+    ca_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
+    frn_para = doc.add_paragraph(f"FRN: {data.ca_frn}")
+    frn_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
     doc.add_paragraph()
     doc.add_paragraph()
-    doc.add_paragraph(f'{data.ca_partner_name.upper()}')
-    doc.add_paragraph(f'{data.ca_designation.upper()}')
-    doc.add_paragraph(f'MEMBERSHIP NO: {data.ca_membership_no}')
-    doc.add_paragraph()
-    doc.add_paragraph(f'PLACE OF SIGNATURE: {data.ca_place.upper()}')
-    doc.add_paragraph(f'DATE: {data.certificate_date}')
-    doc.add_paragraph('UDIN: [TO BE GENERATED]')
+
+    sig_table = doc.add_table(rows=4, cols=2)
+    sig_table.style = 'Table Grid'
+    sig_table.autofit = True
+
+    # Make table borders invisible using XML
+    for row in sig_table.rows:
+        for cell in row.cells:
+            # Set all borders to nil (invisible)
+            tcPr = cell._tc.get_or_add_tcPr()
+            tcBorders = parse_xml(r'<w:tcBorders xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                                  r'<w:top w:val="nil"/>'
+                                  r'<w:left w:val="nil"/>'
+                                  r'<w:bottom w:val="nil"/>'
+                                  r'<w:right w:val="nil"/>'
+                                  r'</w:tcBorders>')
+            tcPr.append(tcBorders)
+
+    # Left column - CA details
+    sig_table.rows[0].cells[0].text = f'{data.ca_partner_name.upper()}'
+    sig_table.rows[1].cells[0].text = f'{data.ca_designation.upper()}'
+    sig_table.rows[2].cells[0].text = f'MEMBERSHIP NO.: {data.ca_membership_no}'
+    sig_table.rows[3].cells[0].text = 'UDIN: [TO BE GENERATED]'
+
+    # Right column - Date and Place
+    sig_table.rows[0].cells[1].text = f'DATE: {data.certificate_date}'
+    sig_table.rows[0].cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+
+    sig_table.rows[1].cells[1].text = f'PLACE: {data.ca_place.upper()}'
+    sig_table.rows[1].cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+
+    # Leave bottom two cells in right column empty for spacing
+    sig_table.rows[2].cells[1].text = ''
+    sig_table.rows[3].cells[1].text = ''
     
     doc.add_paragraph()
-    doc.add_paragraph(f'Enclosure: Statement of Net Worth of Mr./Ms. {data.individual_name} as at {data.certificate_date}')
+
+    name_with_passport = f"{data.individual_name} (Passport No.: {data.passport_number})" if data.passport_number else data.individual_name
+    enclosure_para = doc.add_paragraph(f'Enclosure: Statement of Net Worth of Mr./Ms. {name_with_passport} as at {data.certificate_date}')
+    enclosure_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     
     # Add page break for annexures
     doc.add_page_break()
@@ -473,12 +532,22 @@ def generate_annexures(doc, data: NetWorthData):
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
     doc.add_paragraph()
-    doc.add_paragraph(f'Name of Individual: {data.individual_name}')
-    doc.add_paragraph(f'Address: {data.individual_address}')
-    doc.add_paragraph(f'Date of Certificate: {data.certificate_date}')
-    doc.add_paragraph(f'Purpose: VISA Application – Submission to {data.embassy_name}')
+
+    name_with_passport = f"{data.individual_name} (Passport No.: {data.passport_number})" if data.passport_number else data.individual_name
+    name_para = doc.add_paragraph(f'Name of Individual: {name_with_passport}')
+    name_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
+    address_para = doc.add_paragraph(f'Address: {data.individual_address}')
+    address_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
+    date_para = doc.add_paragraph(f'Date of Certificate: {data.certificate_date}')
+    date_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
+    purpose_para = doc.add_paragraph(f'Purpose: VISA Application – Submission to {data.embassy_name}')
+    purpose_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     
     doc.add_paragraph()
+
     para = doc.add_paragraph()
     run = para.add_run(f'Statement of Net Worth as at {data.certificate_date}')
     run.bold = True
@@ -490,119 +559,87 @@ def generate_annexures(doc, data: NetWorthData):
     run = para.add_run('Annexure (i) - Movable Assets')
     run.bold = True
     
-    table = add_table_with_borders(doc, 13, 5)
+    # Build list of categories with data
+    categories = []
+    if data.bank_accounts:
+        categories.append(('1', 'Bank Account', 'A', data.total_bank_balance_inr, data.total_bank_balance_foreign))
+    if data.insurance_policies:
+        categories.append(('2', 'LIC', 'B', data.total_insurance_inr, data.total_insurance_foreign))
+    if data.pf_accounts:
+        categories.append(('3', 'P.F. Account', 'C', data.total_pf_accounts_inr, data.total_pf_accounts_foreign))
+    if data.deposits:
+        categories.append(('4', 'Deposit', 'D', data.total_deposits_inr, data.total_deposits_foreign))
+    if data.nps_accounts:
+        categories.append(('5', 'NPS', 'E', data.total_nps_inr, data.total_nps_foreign))
+    if data.mutual_funds:
+        categories.append(('6', 'Investment in Mutual Fund', 'F', data.total_mutual_funds_inr, data.total_mutual_funds_foreign))
+    if data.shares:
+        categories.append(('7', 'Shares & Securities', 'G', data.total_shares_inr, data.total_shares_foreign))
+    if data.vehicles:
+        categories.append(('8', 'Vehicles', 'H', data.total_vehicles_inr, data.total_vehicles_foreign))
+    if data.post_office_schemes:
+        categories.append(('9', 'Post Office Schemes', 'I', data.total_post_office_inr, data.total_post_office_foreign))
+    if data.partnership_firms:
+        categories.append(('10', 'Investments in Partnership Firms', 'J', data.total_partnership_firms_inr, data.total_partnership_firms_foreign))
+    if data.gold_holdings:
+        categories.append(('11', 'Gold', 'K', data.total_gold_inr, data.total_gold_foreign))
     
-    # Header row
-    headers = ['Sr. No.', 'Particulars', 'Sub-Annexure', 'Amount in INR', f'Amount in {data.foreign_currency}@ {data.exchange_rate} INR']
-    for i, header in enumerate(headers):
-        cell = table.rows[0].cells[i]
-        cell.text = header
+    # Only create table if there are categories with data
+    if categories:
+        # Create table with header + data rows + total row
+        table = add_table_with_borders(doc, len(categories) + 2, 5)
+    
+        # Header row
+        headers = ['Sr. No.', 'Particulars', 'Sub-Annexure', 'Amount in INR', f'Amount in {data.foreign_currency}@ {data.exchange_rate} INR']
+        for i, header in enumerate(headers):
+            cell = table.rows[0].cells[i]
+            if header == 'Sr. No.':
+                cell.text = 'Sr.\nNo.'
+            else:
+                cell.text = header
+            cell.paragraphs[0].runs[0].bold = True
+    
+        # Data rows - only for categories with data
+        for idx, (sr_no, particular, sub_annexure, inr_amount, foreign_amount) in enumerate(categories, 1):
+            table.rows[idx].cells[0].text = sr_no
+            table.rows[idx].cells[1].text = particular
+            table.rows[idx].cells[2].text = sub_annexure
+            table.rows[idx].cells[3].text = f'{inr_amount:,.2f}'
+            table.rows[idx].cells[4].text = f'{foreign_amount:,.2f}'
+        
+        # Total row
+        total_row = len(categories) + 1
+        table.rows[total_row].cells[0].text = ''
+        cell = table.rows[total_row].cells[1]
+        cell.text = 'Total'
         cell.paragraphs[0].runs[0].bold = True
-    
-    # Bank Accounts
-    table.rows[1].cells[0].text = '1'
-    table.rows[1].cells[1].text = 'Bank Account'
-    table.rows[1].cells[2].text = 'A'
-    table.rows[1].cells[3].text = f'{data.total_bank_balance_inr:,.2f}'
-    table.rows[1].cells[4].text = f'{data.total_bank_balance_foreign:,.2f}'
-    
-    # LIC
-    table.rows[2].cells[0].text = '2'
-    table.rows[2].cells[1].text = 'LIC'
-    table.rows[2].cells[2].text = 'B'
-    table.rows[2].cells[3].text = f'{data.total_insurance_inr:,.2f}'
-    table.rows[2].cells[4].text = f'{data.total_insurance_foreign:,.2f}'
-    
-    # P.F. Accounts
-    table.rows[3].cells[0].text = '3'
-    table.rows[3].cells[1].text = 'P.F. Account'
-    table.rows[3].cells[2].text = 'C'
-    table.rows[3].cells[3].text = f'{data.total_pf_accounts_inr:,.2f}'
-    table.rows[3].cells[4].text = f'{data.total_pf_accounts_foreign:,.2f}'
-
-    # Deposits
-    table.rows[4].cells[0].text = '4'
-    table.rows[4].cells[1].text = 'Deposit'
-    table.rows[4].cells[2].text = 'D'
-    table.rows[4].cells[3].text = f'{data.total_deposits_inr:,.2f}'
-    table.rows[4].cells[4].text = f'{data.total_deposits_foreign:,.2f}'
-
-    # NPS
-    table.rows[5].cells[0].text = '5'
-    table.rows[5].cells[1].text = 'NPS'
-    table.rows[5].cells[2].text = 'E'
-    table.rows[5].cells[3].text = f'{data.total_nps_inr:,.2f}'
-    table.rows[5].cells[4].text = f'{data.total_nps_foreign:,.2f}'
-
-    # Mutual Funds
-    table.rows[6].cells[0].text = '6'
-    table.rows[6].cells[1].text = 'Investment in Mutual Fund'
-    table.rows[6].cells[2].text = 'F'
-    table.rows[6].cells[3].text = f'{data.total_mutual_funds_inr:,.2f}'
-    table.rows[6].cells[4].text = f'{data.total_mutual_funds_foreign:,.2f}'
-
-    # Shares
-    table.rows[7].cells[0].text = '7'
-    table.rows[7].cells[1].text = 'Shares & Securities'
-    table.rows[7].cells[2].text = 'G'
-    table.rows[7].cells[3].text = f'{data.total_shares_inr:,.2f}'
-    table.rows[7].cells[4].text = f'{data.total_shares_foreign:,.2f}'
-
-    # Vehicles
-    table.rows[8].cells[0].text = '8'
-    table.rows[8].cells[1].text = 'Vehicles'
-    table.rows[8].cells[2].text = 'H'
-    table.rows[8].cells[3].text = f'{data.total_vehicles_inr:,.2f}'
-    table.rows[8].cells[4].text = f'{data.total_vehicles_foreign:,.2f}'
-
-    # Post Office Schemes
-    table.rows[9].cells[0].text = '9'
-    table.rows[9].cells[1].text = 'Post Office Schemes'
-    table.rows[9].cells[2].text = 'I'
-    table.rows[9].cells[3].text = f'{data.total_post_office_inr:,.2f}'
-    table.rows[9].cells[4].text = f'{data.total_post_office_foreign:,.2f}'
-
-    # Partnership Firms
-    table.rows[10].cells[0].text = '10'
-    table.rows[10].cells[1].text = 'Investments in Partnership Firms'
-    table.rows[10].cells[2].text = 'J'
-    table.rows[10].cells[3].text = f'{data.total_partnership_firms_inr:,.2f}'
-    table.rows[10].cells[4].text = f'{data.total_partnership_firms_foreign:,.2f}'
-
-    # Gold
-    table.rows[11].cells[0].text = '11'
-    table.rows[11].cells[1].text = 'Gold'
-    table.rows[11].cells[2].text = 'K'
-    table.rows[11].cells[3].text = f'{data.total_gold_inr:,.2f}'
-    table.rows[11].cells[4].text = f'{data.total_gold_foreign:,.2f}'
-    
-    # Total
-    table.rows[12].cells[0].text = ''
-    cell = table.rows[12].cells[1]
-    cell.text = 'Total'
-    cell.paragraphs[0].runs[0].bold = True
-    table.rows[12].cells[2].text = ''
-    cell = table.rows[12].cells[3]
-    cell.text = f'{data.total_movable_assets_inr:,.2f}'
-    cell.paragraphs[0].runs[0].bold = True
-    cell = table.rows[12].cells[4]
-    cell.text = f'{data.total_movable_assets_foreign:,.2f}'
-    cell.paragraphs[0].runs[0].bold = True
+        table.rows[total_row].cells[2].text = ''
+        cell = table.rows[total_row].cells[3]
+        cell.text = f'{data.total_movable_assets_inr:,.2f}'
+        cell.paragraphs[0].runs[0].bold = True
+        cell = table.rows[total_row].cells[4]
+        cell.text = f'{data.total_movable_assets_foreign:,.2f}'
+        cell.paragraphs[0].runs[0].bold = True
+    else:
+        # If no movable assets, add a note
+        doc.add_paragraph('No movable assets to report.')
     
     # Sub Annexure A - Bank Accounts
-    doc.add_paragraph()
-    para = doc.add_paragraph()
-    run = para.add_run('Sub Annexure (A) – Bank Account')
-    run.bold = True
-    
     if data.bank_accounts:
+        doc.add_paragraph()
+        para = doc.add_paragraph()
+        run = para.add_run('Sub Annexure (A) – Bank Account')
+        run.bold = True
         table = add_table_with_borders(doc, len(data.bank_accounts) + 2, 6)
         
         # Headers
         headers = ['Sr. No.', 'Name of the Account Holder', 'Account No.', 'Bank Name', 'Amount in INR', f'Amount in {data.foreign_currency}@ {data.exchange_rate} INR']
         for i, header in enumerate(headers):
             cell = table.rows[0].cells[i]
-            cell.text = header
+            if header == 'Sr. No.':
+                cell.text = 'Sr.\nNo.'
+            else:
+                cell.text = header
             cell.paragraphs[0].runs[0].bold = True
         
         # Data rows
@@ -627,18 +664,20 @@ def generate_annexures(doc, data: NetWorthData):
         cell.paragraphs[0].runs[0].bold = True
     
     # Sub Annexure B - Insurance Policies
-    doc.add_paragraph()
-    para = doc.add_paragraph()
-    run = para.add_run('Sub Annexure (B): LIFE INSURANCE POLICIES')
-    run.bold = True
-    
     if data.insurance_policies:
+        doc.add_paragraph()
+        para = doc.add_paragraph()
+        run = para.add_run('Sub Annexure (B): LIFE INSURANCE POLICIES')
+        run.bold = True
         table = add_table_with_borders(doc, len(data.insurance_policies) + 2, 5)
         
         headers = ['Sr. No.', 'POLICY Holder', 'Policy No.', 'Amount in INR', f'Amount in {data.foreign_currency}@ {data.exchange_rate} INR']
         for i, header in enumerate(headers):
             cell = table.rows[0].cells[i]
-            cell.text = header
+            if header == 'Sr. No.':
+                cell.text = 'Sr.\nNo.'
+            else:
+                cell.text = header
             cell.paragraphs[0].runs[0].bold = True
         
         for idx, policy in enumerate(data.insurance_policies, 1):
@@ -660,17 +699,19 @@ def generate_annexures(doc, data: NetWorthData):
         cell.paragraphs[0].runs[0].bold = True
     
     # Sub Annexure C - P.F. Accounts
-    doc.add_paragraph()
-    para = doc.add_paragraph()
-    run = para.add_run('Sub Annexure (C) - P.F Account')
-    run.bold = True
-    
     if data.pf_accounts:
+        doc.add_paragraph()
+        para = doc.add_paragraph()
+        run = para.add_run('Sub Annexure (C) - P.F Account')
+        run.bold = True
         table = add_table_with_borders(doc, len(data.pf_accounts) + 2, 5)
         headers = ['Sr. No.', 'Name of the Account Holder', 'PF Account No.', 'Amount in INR', f'Amount in {data.foreign_currency}@ {data.exchange_rate} INR']
         for i, header in enumerate(headers):
             cell = table.rows[0].cells[i]
-            cell.text = header
+            if header == 'Sr. No.':
+                cell.text = 'Sr.\nNo.'
+            else:
+                cell.text = header
             cell.paragraphs[0].runs[0].bold = True
         
         for idx, acc in enumerate(data.pf_accounts, 1):
@@ -692,17 +733,19 @@ def generate_annexures(doc, data: NetWorthData):
         cell.paragraphs[0].runs[0].bold = True
 
     # Sub Annexure D - Deposits
-    doc.add_paragraph()
-    para = doc.add_paragraph()
-    run = para.add_run('Sub Annexure (D): Deposit')
-    run.bold = True
-
     if data.deposits:
+        doc.add_paragraph()
+        para = doc.add_paragraph()
+        run = para.add_run('Sub Annexure (D): Deposit')
+        run.bold = True
         table = add_table_with_borders(doc, len(data.deposits) + 2, 5)
         headers = ['Sr. No.', 'Name of Investment Holder', 'A/C Number', 'Amount in INR', f'Amount in {data.foreign_currency}@ {data.exchange_rate} INR']
         for i, header in enumerate(headers):
             cell = table.rows[0].cells[i]
-            cell.text = header
+            if header == 'Sr. No.':
+                cell.text = 'Sr.\nNo.'
+            else:
+                cell.text = header
             cell.paragraphs[0].runs[0].bold = True
         
         for idx, dep in enumerate(data.deposits, 1):
@@ -724,17 +767,19 @@ def generate_annexures(doc, data: NetWorthData):
         cell.paragraphs[0].runs[0].bold = True
     
     # Sub Annexure E - NPS
-    doc.add_paragraph()
-    para = doc.add_paragraph()
-    run = para.add_run('Sub Annexure (E) - NPS')
-    run.bold = True
-    
     if data.nps_accounts:
+        doc.add_paragraph()
+        para = doc.add_paragraph()
+        run = para.add_run('Sub Annexure (E) - NPS')
+        run.bold = True
         table = add_table_with_borders(doc, len(data.nps_accounts) + 2, 5)
         headers = ['Sr. No.', 'Name of Owner', 'PRAN No.', 'Amount in INR', f'Amount in {data.foreign_currency}@ {data.exchange_rate} INR']
         for i, header in enumerate(headers):
             cell = table.rows[0].cells[i]
-            cell.text = header
+            if header == 'Sr. No.':
+                cell.text = 'Sr.\nNo.'
+            else:
+                cell.text = header
             cell.paragraphs[0].runs[0].bold = True
         
         for idx, nps in enumerate(data.nps_accounts, 1):
@@ -756,17 +801,19 @@ def generate_annexures(doc, data: NetWorthData):
         cell.paragraphs[0].runs[0].bold = True
 
     # Sub Annexure F - Investment in Mutual Fund
-    doc.add_paragraph()
-    para = doc.add_paragraph()
-    run = para.add_run('Sub Annexure (F) - Investment in Mutual Fund')
-    run.bold = True
-
     if data.mutual_funds:
+        doc.add_paragraph()
+        para = doc.add_paragraph()
+        run = para.add_run('Sub Annexure (F) - Investment in Mutual Fund')
+        run.bold = True
         table = add_table_with_borders(doc, len(data.mutual_funds) + 2, 6)
         headers = ['Sr. No.', 'Name of the Account Holder', 'Policy/Folio Number', 'Policy Name', 'Amount in INR', f'Amount in {data.foreign_currency}@ {data.exchange_rate} INR']
         for i, header in enumerate(headers):
             cell = table.rows[0].cells[i]
-            cell.text = header
+            if header == 'Sr. No.':
+                cell.text = 'Sr.\nNo.'
+            else:
+                cell.text = header
             cell.paragraphs[0].runs[0].bold = True
 
         for idx, mf in enumerate(data.mutual_funds, 1):
@@ -789,18 +836,20 @@ def generate_annexures(doc, data: NetWorthData):
         cell.paragraphs[0].runs[0].bold = True
 
     # Sub Annexure G - Gold
-    doc.add_paragraph()
-    para = doc.add_paragraph()
-    run = para.add_run('Sub Annexure (G) - Gold')
-    run.bold = True
-    
     if data.gold_holdings:
+        doc.add_paragraph()
+        para = doc.add_paragraph()
+        run = para.add_run('Sub Annexure (G) - Gold')
+        run.bold = True
         table = add_table_with_borders(doc, len(data.gold_holdings) + 2, 6)
         
         headers = ['Sr. No.', 'Name of Party', 'Weight (gram)', 'Rate/10 g (Rs.)', 'Amount in INR', f'Amount in {data.foreign_currency}@ {data.exchange_rate} INR']
         for i, header in enumerate(headers):
             cell = table.rows[0].cells[i]
-            cell.text = header
+            if header == 'Sr. No.':
+                cell.text = 'Sr.\nNo.'
+            else:
+                cell.text = header
             cell.paragraphs[0].runs[0].bold = True
         
         for idx, gold in enumerate(data.gold_holdings, 1):
@@ -823,21 +872,24 @@ def generate_annexures(doc, data: NetWorthData):
         cell.paragraphs[0].runs[0].bold = True
         
         if data.gold_holdings and data.gold_holdings[0].valuation_date:
-            doc.add_paragraph(f'As per the Property Valuation Certificates dated {data.gold_holdings[0].valuation_date} issued by Approved Valuer {data.gold_holdings[0].valuer_name}')
+            valuer_para = doc.add_paragraph(f'As per the Property Valuation Certificates dated {data.gold_holdings[0].valuation_date} issued by Approved Valuer {data.gold_holdings[0].valuer_name}')
+            valuer_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     
     # Annexure (ii) - Immovable Assets
-    doc.add_paragraph()
-    para = doc.add_paragraph()
-    run = para.add_run('Annexure (ii) - Immovable Assets')
-    run.bold = True
-    
     if data.properties:
+        doc.add_paragraph()
+        para = doc.add_paragraph()
+        run = para.add_run('Annexure (ii) - Immovable Assets')
+        run.bold = True
         table = add_table_with_borders(doc, len(data.properties) + 2, 4)
         
         headers = ['Sr. No.', 'Particulars of Property', 'Amount in INR', f'Amount in {data.foreign_currency}@ {data.exchange_rate} INR']
         for i, header in enumerate(headers):
             cell = table.rows[0].cells[i]
-            cell.text = header
+            if header == 'Sr. No.':
+                cell.text = 'Sr.\nNo.'
+            else:
+                cell.text = header
             cell.paragraphs[0].runs[0].bold = True
         
         for idx, prop in enumerate(data.properties, 1):
@@ -861,18 +913,20 @@ def generate_annexures(doc, data: NetWorthData):
         cell.paragraphs[0].runs[0].bold = True
     
     # Annexure (iii) - Liabilities
-    doc.add_paragraph()
-    para = doc.add_paragraph()
-    run = para.add_run('Annexure (iii) - Liabilities')
-    run.bold = True
-    
     if data.liabilities:
+        doc.add_paragraph()
+        para = doc.add_paragraph()
+        run = para.add_run('Annexure (iii) - Liabilities')
+        run.bold = True
         table = add_table_with_borders(doc, len(data.liabilities) + 2, 4)
         
         headers = ['Sr. No.', 'Description', 'Details', 'Amount in INR']
         for i, header in enumerate(headers):
             cell = table.rows[0].cells[i]
-            cell.text = header
+            if header == 'Sr. No.':
+                cell.text = 'Sr.\nNo.'
+            else:
+                cell.text = header
             cell.paragraphs[0].runs[0].bold = True
         
         for idx, liab in enumerate(data.liabilities, 1):
@@ -888,35 +942,79 @@ def generate_annexures(doc, data: NetWorthData):
         cell = table.rows[last_row].cells[3]
         cell.text = f'{data.total_liabilities_inr:,.2f}'
         cell.paragraphs[0].runs[0].bold = True
-    else:
-        doc.add_paragraph('NIL')
     
     # Net Worth Calculation
     doc.add_paragraph()
     para = doc.add_paragraph()
-    run = para.add_run(f'Net Worth (i+ii-iii): ₹{data.net_worth_inr:,.2f}')
+    run = para.add_run(f'Net Worth: ₹{data.net_worth_inr:,.2f}')
     run.bold = True
     run.font.size = Pt(14)
     
     # Notes
     doc.add_paragraph()
-    doc.add_paragraph('Notes:')
-    doc.add_paragraph('1. The above Statement is prepared based on details and supporting documents provided by the individual.')
-    doc.add_paragraph('2. Valuation of assets is based on self-declaration / available records and has not been independently verified unless specified.')
-    doc.add_paragraph(f'3. This Annexure should be read with the Certificate dated {data.certificate_date} issued by the undersigned.')
+
+    notes_title = doc.add_paragraph('Notes:')
+    notes_title.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
+    note1 = doc.add_paragraph('1. The above Statement is prepared based on details and supporting documents provided by the individual.')
+    note1.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
+    note2 = doc.add_paragraph('2. Valuation of assets is based on self-declaration / available records and has not been independently verified unless specified.')
+    note2.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
+    note3 = doc.add_paragraph(f'3. This Annexure should be read with the Certificate dated {data.certificate_date} issued by the undersigned.')
+    note3.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     
     doc.add_paragraph()
     doc.add_paragraph()
     
     # Final Signature
-    doc.add_paragraph(f'FOR, {data.ca_firm_name.upper()}')
-    doc.add_paragraph('CHARTERED ACCOUNTANTS')
-    doc.add_paragraph(f'FRN: {data.ca_frn}')
+    final_firm_para = doc.add_paragraph(f'FOR, {data.ca_firm_name.upper()}')
+    final_firm_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
+    final_ca_para = doc.add_paragraph('CHARTERED ACCOUNTANTS')
+    final_ca_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
+    final_frn_para = doc.add_paragraph(f'FRN: {data.ca_frn}')
+    final_frn_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
     doc.add_paragraph()
-    doc.add_paragraph(f'{data.ca_partner_name.upper()}        DATE: {data.certificate_date}')
-    doc.add_paragraph(f'{data.ca_designation.upper()}        PLACE: {data.ca_place.upper()}')
-    doc.add_paragraph(f'MEMBERSHIP NO.: {data.ca_membership_no}')
-    doc.add_paragraph('UDIN: [TO BE GENERATED]')
+    doc.add_paragraph()
+
+    # Create two-column layout for signature
+    sig_table = doc.add_table(rows=4, cols=2)
+    sig_table.style = 'Table Grid'
+    sig_table.autofit = True
+
+    # Make table borders invisible using XML
+    for row in sig_table.rows:
+        for cell in row.cells:
+            # Set all borders to nil (invisible)
+            tcPr = cell._tc.get_or_add_tcPr()
+            tcBorders = parse_xml(r'<w:tcBorders xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                                  r'<w:top w:val="nil"/>'
+                                  r'<w:left w:val="nil"/>'
+                                  r'<w:bottom w:val="nil"/>'
+                                  r'<w:right w:val="nil"/>'
+                                  r'</w:tcBorders>')
+            tcPr.append(tcBorders)
+
+    # Left column - CA details
+    sig_table.rows[0].cells[0].text = f'{data.ca_partner_name.upper()}'
+    sig_table.rows[1].cells[0].text = f'{data.ca_designation.upper()}'
+    sig_table.rows[2].cells[0].text = f'MEMBERSHIP NO.: {data.ca_membership_no}'
+    sig_table.rows[3].cells[0].text = 'UDIN: [TO BE GENERATED]'
+
+    # Right column - Date and Place
+    sig_table.rows[0].cells[1].text = f'DATE: {data.certificate_date}'
+    sig_table.rows[0].cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+
+    sig_table.rows[1].cells[1].text = f'PLACE: {data.ca_place.upper()}'
+    sig_table.rows[1].cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+
+    # Leave bottom two cells in right column empty for spacing
+    sig_table.rows[2].cells[1].text = ''
+    sig_table.rows[3].cells[1].text = ''
 
 def convert_to_words(number):
     """Convert number to words (simplified - for production use num2words library)"""
@@ -925,12 +1023,204 @@ def convert_to_words(number):
 
 # ==================== STREAMLIT UI ====================
 
+def auto_fill_test_data():
+    """Auto-fill all form fields with comprehensive test data for testing"""
+    import datetime
+
+    # Initialize session state data
+    st.session_state.data = NetWorthData(
+        individual_name="Bharatkumar Dhulabhai Patel",
+        individual_address="29/B, Ratnamani Tenaments, Ahmedabad, Gujarat - 380001",
+        certificate_date=datetime.date.today().strftime("%d/%m/%Y"),
+        engagement_date=datetime.date.today().strftime("%d/%m/%Y"),
+        embassy_name="Canadian High Commission",
+        embassy_address="7/8 Shantipath, Chanakyapuri\nNew Delhi - 110021",
+        passport_number="A12345678",
+        foreign_currency="CAD",
+        exchange_rate=63.34
+    )
+
+    # Bank Accounts
+    st.session_state.data.bank_accounts = [
+        BankAccount(
+            holder_name="Bharatkumar Dhulabhai Patel",
+            account_number="10733415306",
+            bank_name="State Bank of India",
+            balance_inr=1078118.46,
+            statement_date=datetime.date.today().strftime("%d/%m/%Y")
+        ),
+        BankAccount(
+            holder_name="Bharatkumar Dhulabhai Patel",
+            account_number="20093766850",
+            bank_name="HDFC Bank",
+            balance_inr=385989.69,
+            statement_date=datetime.date.today().strftime("%d/%m/%Y")
+        )
+    ]
+
+    # Insurance Policies
+    st.session_state.data.insurance_policies = [
+        InsurancePolicy(
+            holder_name="Bharatkumar Dhulabhai Patel",
+            policy_number="71234567890",
+            amount_inr=253618.00
+        )
+    ]
+
+    # P.F. Accounts
+    st.session_state.data.pf_accounts = [
+        PFAccount(
+            holder_name="Bharatkumar Dhulabhai Patel",
+            pf_account_number="GJ/AMD/12345/678",
+            amount_inr=1850652.00
+        )
+    ]
+
+    # Deposits
+    st.session_state.data.deposits = [
+        Deposit(
+            holder_name="Bharatkumar Dhulabhai Patel",
+            account_number="FD123456789",
+            amount_inr=1000000.00
+        )
+    ]
+
+    # NPS Accounts
+    st.session_state.data.nps_accounts = [
+        NPSAccount(
+            owner_name="Bharatkumar Dhulabhai Patel",
+            pran_number="110021379979",
+            amount_inr=2578706.52
+        )
+    ]
+
+    # Mutual Funds
+    st.session_state.data.mutual_funds = [
+        MutualFund(
+            holder_name="Bharatkumar Dhulabhai Patel",
+            folio_number="34521763/59",
+            policy_name="HDFC Flexi Cap Fund",
+            amount_inr=126662.88
+        )
+    ]
+
+    # Shares
+    st.session_state.data.shares = [
+        Share(
+            company_name="Reliance Industries Ltd",
+            num_shares=100,
+            market_price_inr=2450.00
+        ),
+        Share(
+            company_name="TCS Ltd",
+            num_shares=50,
+            market_price_inr=3200.00
+        )
+    ]
+
+    # Vehicles
+    st.session_state.data.vehicles = [
+        Vehicle(
+            vehicle_type="Car",
+            make_model_year="Toyota Innova Crysta 2020",
+            registration_number="GJ01AB1234",
+            market_value_inr=1500000.00
+        )
+    ]
+
+    # Post Office Schemes
+    st.session_state.data.post_office_schemes = [
+        PostOfficeScheme(
+            scheme_type="National Savings Certificate (NSC)",
+            account_number="NSC123456789",
+            amount_inr=500000.00
+        )
+    ]
+
+    # Partnership Firms
+    st.session_state.data.partnership_firms = [
+        PartnershipFirm(
+            firm_name="Patel Brothers Trading Co.",
+            partner_name="Bharatkumar Dhulabhai Patel",
+            holding_percentage=33.33,
+            capital_balance_inr=2000000.00,
+            valuation_date=datetime.date.today().strftime("%d/%m/%Y")
+        )
+    ]
+
+    # Gold Holdings
+    st.session_state.data.gold_holdings = [
+        GoldHolding(
+            owner_name="Bharatkumar Dhulabhai Patel",
+            weight_grams=399.570,
+            rate_per_10g=109500,
+            valuation_date=datetime.date.today().strftime("%d/%m/%Y"),
+            valuer_name="Approved Valuer - Ahmedabad"
+        )
+    ]
+
+    # Properties
+    st.session_state.data.properties = [
+        Property(
+            owner_name="Bharatkumar Dhulabhai Patel",
+            property_type="Residential House",
+            address="29/B, Ratnamani Tenaments, Survey No. 123, Ahmedabad",
+            valuation_inr=1260000,
+            valuation_date=datetime.date.today().strftime("%d/%m/%Y"),
+            valuer_name="Approved Valuer - Ahmedabad"
+        ),
+        Property(
+            owner_name="Bharatkumar Dhulabhai Patel",
+            property_type="Commercial Property",
+            address="Shop No. 5, Commercial Complex, SG Highway, Ahmedabad",
+            valuation_inr=2500000,
+            valuation_date=datetime.date.today().strftime("%d/%m/%Y"),
+            valuer_name="Approved Valuer - Ahmedabad"
+        )
+    ]
+
+    # Liabilities
+    st.session_state.data.liabilities = [
+        Liability(
+            description="Home Loan",
+            amount_inr=800000.00,
+            details="Housing loan from SBI for residential property"
+        )
+    ]
+
+    print("✅ Test data auto-filled successfully!")
+    print(f"📊 Total Assets: ₹{st.session_state.data.total_movable_assets_inr + st.session_state.data.total_immovable_assets_inr:,.2f}")
+    print(f"💰 Net Worth: ₹{st.session_state.data.net_worth_inr:,.2f}")
+    print("🎯 Ready to generate certificate on Summary page!")
+
 def main():
     st.set_page_config(page_title="Net Worth Certificate Generator", layout="wide", page_icon="📄")
     
+    # Check for test mode parameter
+    query_params = st.query_params
+    test_mode = query_params.get('test', 'false').lower() == 'true'
+
     # Theme management
     if 'theme' not in st.session_state:
         st.session_state.theme = 'light'
+
+    # Auto-fill test data if in test mode
+    if test_mode and 'data' not in st.session_state:
+        auto_fill_test_data()
+
+        # Auto-navigate to summary page in test mode
+        if test_mode:
+            st.markdown("""
+            <script>
+                // Auto-navigate to Summary tab
+                setTimeout(() => {
+                    const tabs = document.querySelectorAll('[data-baseweb="tab"]');
+                    if (tabs.length > 0) {
+                        tabs[tabs.length - 1].click(); // Click last tab (Summary)
+                    }
+                }, 1000); // Wait 1 second for data to load
+            </script>
+            """, unsafe_allow_html=True)
 
     # Theme toggle function
     def toggle_theme():
@@ -1388,13 +1678,15 @@ def main():
             certificate_date=datetime.date.today().strftime("%d/%m/%Y"),
             engagement_date=datetime.date.today().strftime("%d/%m/%Y"),
             embassy_name="",
-            embassy_address=""
+            embassy_address="",
+            passport_number=""
         )
     
     # For forward compatibility: ensure new fields exist on older session state objects
     new_fields = {
         'pf_accounts': [], 'deposits': [], 'nps_accounts': [], 'mutual_funds': [],
-        'shares': [], 'vehicles': [], 'post_office_schemes': [], 'partnership_firms': []
+        'shares': [], 'vehicles': [], 'post_office_schemes': [], 'partnership_firms': [],
+        'passport_number': ''
     }
     for field, default_value in new_fields.items():
         if not hasattr(st.session_state.data, field):
@@ -1431,6 +1723,12 @@ def main():
                 "Individual's Full Name *", 
                 value=st.session_state.data.individual_name,
                 key="ind_name"
+            )
+            st.session_state.data.passport_number = st.text_input(
+                "Passport Number", 
+                value=st.session_state.data.passport_number,
+                key="passport_num",
+                help="Passport number will be displayed after the name in the certificate"
             )
             st.session_state.data.individual_address = st.text_area(
                 "Individual's Address *", 
