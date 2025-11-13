@@ -320,6 +320,12 @@ class NetWorthData:
         return sum(liab.amount_inr for liab in self.liabilities)
     
     @property
+    def total_liabilities_foreign(self) -> float:
+        if self.exchange_rate == 0:
+            return 0.0
+        return self.total_liabilities_inr / self.exchange_rate
+    
+    @property
     def net_worth_inr(self) -> float:
         return self.total_movable_assets_inr + self.total_immovable_assets_inr - self.total_liabilities_inr
     
@@ -391,6 +397,12 @@ def fetch_exchange_rate(currency: str) -> float:
     except Exception as e:
         st.warning(f"Error fetching exchange rate: {str(e)}. Using default rate.")
         return None
+
+def enforce_sr_no_column_width(table, headers, width=Inches(0.25)):
+    """Ensure the Sr. No. column stays narrow to save space"""
+    if headers and headers[0].strip().startswith('Sr'):
+        for row in table.rows:
+            row.cells[0].width = width
 
 def generate_networth_certificate(data: NetWorthData) -> Document:
     """Generate the complete Net Worth Certificate document"""
@@ -583,6 +595,58 @@ def generate_annexures(doc, data: NetWorthData):
     
     doc.add_paragraph()
     
+    # Summary - Net Worth Table
+    summary_title = doc.add_paragraph()
+    summary_title_run = summary_title.add_run('SUMMARY - NET WORTH')
+    summary_title_run.bold = True
+    summary_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    doc.add_paragraph()
+    
+    # Create summary table: 4 rows (header + 3 data rows + 1 total row) = 5 rows, 4 columns
+    summary_table = add_table_with_borders(doc, 5, 4)
+    
+    # Header row
+    summary_headers = ['Particulars', f'Estimated Market Value (INR)', f'Estimated Market Value ({data.foreign_currency}@ {data.exchange_rate})', 'Annexure']
+    for i, header in enumerate(summary_headers):
+        cell = summary_table.rows[0].cells[i]
+        cell.text = header
+        cell.paragraphs[0].runs[0].bold = True
+    
+    # Row 1: Movable Assets
+    summary_table.rows[1].cells[0].text = 'Movable Assets'
+    summary_table.rows[1].cells[1].text = f'{data.total_movable_assets_inr:,.2f}'
+    summary_table.rows[1].cells[2].text = f'{data.total_movable_assets_foreign:,.2f}'
+    summary_table.rows[1].cells[3].text = '(i)'
+    
+    # Row 2: Immovable Assets
+    summary_table.rows[2].cells[0].text = 'Immovable Assets'
+    summary_table.rows[2].cells[1].text = f'{data.total_immovable_assets_inr:,.2f}'
+    summary_table.rows[2].cells[2].text = f'{data.total_immovable_assets_foreign:,.2f}'
+    summary_table.rows[2].cells[3].text = '(ii)'
+    
+    # Row 3: Liabilities
+    summary_table.rows[3].cells[0].text = 'Liabilities'
+    if data.total_liabilities_inr > 0:
+        summary_table.rows[3].cells[1].text = f'{data.total_liabilities_inr:,.2f}'
+        summary_table.rows[3].cells[2].text = f'{data.total_liabilities_foreign:,.2f}'
+    else:
+        summary_table.rows[3].cells[1].text = '-'
+        summary_table.rows[3].cells[2].text = '-'
+    summary_table.rows[3].cells[3].text = '(iii)'
+    
+    # Row 4: Total (i+ii-iii)
+    summary_table.rows[4].cells[0].text = 'Total (i+ii-iii)'
+    summary_table.rows[4].cells[0].paragraphs[0].runs[0].bold = True
+    summary_table.rows[4].cells[1].text = f'{data.net_worth_inr:,.2f}'
+    summary_table.rows[4].cells[1].paragraphs[0].runs[0].bold = True
+    summary_table.rows[4].cells[2].text = f'{data.net_worth_foreign:,.2f}'
+    summary_table.rows[4].cells[2].paragraphs[0].runs[0].bold = True
+    summary_table.rows[4].cells[3].text = ''
+    
+    doc.add_paragraph()
+    doc.add_paragraph()
+    
     # Annexure (i) - Movable Assets Summary
     para = doc.add_paragraph()
     run = para.add_run('Annexure (i) - Movable Assets')
@@ -617,7 +681,7 @@ def generate_annexures(doc, data: NetWorthData):
     if categories:
         # Create table with header + data rows + total row
         table = add_table_with_borders(doc, len(categories) + 2, 5)
-    
+        
         # Header row
         headers = ['Sr. No.', 'Particulars', 'Sub-Annexure', 'Amount in INR', f'Amount in {data.foreign_currency}@ {data.exchange_rate} INR']
         for i, header in enumerate(headers):
@@ -627,7 +691,9 @@ def generate_annexures(doc, data: NetWorthData):
             else:
                 cell.text = header
             cell.paragraphs[0].runs[0].bold = True
-    
+        
+        enforce_sr_no_column_width(table, headers)
+        
         # Data rows - only for categories with data
         for idx, (sr_no, particular, sub_annexure, inr_amount, foreign_amount) in enumerate(categories, 1):
             table.rows[idx].cells[0].text = sr_no
@@ -671,6 +737,8 @@ def generate_annexures(doc, data: NetWorthData):
                 cell.text = header
             cell.paragraphs[0].runs[0].bold = True
         
+        enforce_sr_no_column_width(table, headers)
+        
         # Data rows
         for idx, acc in enumerate(data.bank_accounts, 1):
             table.rows[idx].cells[0].text = str(idx)
@@ -709,6 +777,8 @@ def generate_annexures(doc, data: NetWorthData):
                 cell.text = header
             cell.paragraphs[0].runs[0].bold = True
         
+        enforce_sr_no_column_width(table, headers)
+        
         for idx, policy in enumerate(data.insurance_policies, 1):
             table.rows[idx].cells[0].text = str(idx)
             table.rows[idx].cells[1].text = policy.holder_name
@@ -742,6 +812,8 @@ def generate_annexures(doc, data: NetWorthData):
             else:
                 cell.text = header
             cell.paragraphs[0].runs[0].bold = True
+        
+        enforce_sr_no_column_width(table, headers)
         
         for idx, acc in enumerate(data.pf_accounts, 1):
             table.rows[idx].cells[0].text = str(idx)
@@ -777,6 +849,8 @@ def generate_annexures(doc, data: NetWorthData):
                 cell.text = header
             cell.paragraphs[0].runs[0].bold = True
         
+        enforce_sr_no_column_width(table, headers)
+        
         for idx, dep in enumerate(data.deposits, 1):
             table.rows[idx].cells[0].text = str(idx)
             table.rows[idx].cells[1].text = dep.holder_name
@@ -811,6 +885,8 @@ def generate_annexures(doc, data: NetWorthData):
                 cell.text = header
             cell.paragraphs[0].runs[0].bold = True
         
+        enforce_sr_no_column_width(table, headers)
+        
         for idx, nps in enumerate(data.nps_accounts, 1):
             table.rows[idx].cells[0].text = str(idx)
             table.rows[idx].cells[1].text = nps.owner_name
@@ -844,6 +920,8 @@ def generate_annexures(doc, data: NetWorthData):
             else:
                 cell.text = header
             cell.paragraphs[0].runs[0].bold = True
+        
+        enforce_sr_no_column_width(table, headers)
 
         for idx, mf in enumerate(data.mutual_funds, 1):
             table.rows[idx].cells[0].text = str(idx)
@@ -880,6 +958,8 @@ def generate_annexures(doc, data: NetWorthData):
             else:
                 cell.text = header
             cell.paragraphs[0].runs[0].bold = True
+        
+        enforce_sr_no_column_width(table, headers)
         
         for idx, gold in enumerate(data.gold_holdings, 1):
             table.rows[idx].cells[0].text = str(idx)
@@ -921,6 +1001,8 @@ def generate_annexures(doc, data: NetWorthData):
                 cell.text = header
             cell.paragraphs[0].runs[0].bold = True
         
+        enforce_sr_no_column_width(table, headers)
+        
         for idx, prop in enumerate(data.properties, 1):
             table.rows[idx].cells[0].text = str(idx)
             property_text = f'{prop.owner_name}\n\n{prop.property_type}\n\n{prop.address}'
@@ -958,6 +1040,8 @@ def generate_annexures(doc, data: NetWorthData):
                 cell.text = header
             cell.paragraphs[0].runs[0].bold = True
         
+        enforce_sr_no_column_width(table, headers)
+        
         for idx, liab in enumerate(data.liabilities, 1):
             table.rows[idx].cells[0].text = str(idx)
             table.rows[idx].cells[1].text = liab.description
@@ -993,6 +1077,12 @@ def generate_annexures(doc, data: NetWorthData):
 
     note3 = doc.add_paragraph(f'3. This Annexure should be read with the Certificate dated {data.certificate_date} issued by the undersigned.')
     note3.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
+    note4 = doc.add_paragraph('4. Loan documents and related confirmations were not made available for verification. As informed to us there is no any liability as on the date.')
+    note4.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
+    note5 = doc.add_paragraph('5. The Information Furnished in the Certificate do not certify any Title Neither Ownership as we are not Legal Expert.')
+    note5.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     
     doc.add_paragraph()
     doc.add_paragraph()
@@ -1830,11 +1920,11 @@ def main():
                             st.info(f"Using current rate: {st.session_state.data.exchange_rate} INR = 1 {selected_currency}")
                 
                 # Exchange rate input (editable)
-                st.session_state.data.exchange_rate = st.number_input(
+            st.session_state.data.exchange_rate = st.number_input(
                     f"Exchange Rate (INR to 1 {selected_currency})",
-                    min_value=0.01,
+                min_value=0.01,
                     value=st.session_state.data.exchange_rate,
-                    step=0.01,
+                step=0.01,
                     format="%.2f",
                     key="exchange_rate_input"
                 )
