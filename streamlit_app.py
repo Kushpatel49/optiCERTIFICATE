@@ -193,6 +193,21 @@ class NetWorthData:
     # Liabilities
     liabilities: List[Liability] = field(default_factory=list)
     
+    # Notes for each category
+    bank_accounts_notes: str = ""
+    insurance_policies_notes: str = ""
+    pf_accounts_notes: str = ""
+    deposits_notes: str = ""
+    nps_accounts_notes: str = ""
+    mutual_funds_notes: str = ""
+    shares_notes: str = ""
+    vehicles_notes: str = ""
+    post_office_schemes_notes: str = ""
+    partnership_firms_notes: str = ""
+    gold_holdings_notes: str = ""
+    properties_notes: str = ""
+    liabilities_notes: str = ""
+    
     # CA Details (Pre-filled)
     ca_firm_name: str = "Patel Parekh & Associates"
     ca_frn: str = "154335W"
@@ -364,10 +379,35 @@ def set_cell_border(cell, **kwargs):
             tcPr.append(element)
 
 def add_table_with_borders(doc, rows, cols):
-    """Add table with borders"""
+    """Add table with borders and fixed width"""
     table = doc.add_table(rows=rows, cols=cols)
     table.style = 'Table Grid'
-    table.autofit = True  # Set layout to autofit content
+    table.autofit = False  # Disable autofit to set fixed width
+    # Set table width to 6.5 inches (standard width for Word documents)
+    table.width = Inches(6.5)
+    
+    # Smart column width management - set cell widths individually for better control
+    # Sr. No. column gets 0.6 inches (wider for better readability)
+    # Remaining columns share the rest proportionally
+    if cols > 0:
+        total_width = Inches(6.5)
+        sr_no_width = Inches(0.4)  # Increased from 0.25 to 0.6 for better readability
+        remaining_width = total_width - sr_no_width
+        
+        # Calculate width for other columns
+        if cols > 1:
+            other_col_width = remaining_width / (cols - 1)
+        else:
+            other_col_width = remaining_width
+        
+        # Set width for each cell individually (more reliable than column.width)
+        for row in table.rows:
+            for i, cell in enumerate(row.cells):
+                if i == 0:  # First column (Sr. No.)
+                    cell.width = sr_no_width
+                else:
+                    cell.width = other_col_width
+    
     return table
 
 def fetch_exchange_rate(currency: str) -> float:
@@ -462,7 +502,7 @@ def generate_networth_certificate(data: NetWorthData) -> Document:
     run.bold = True
     run.underline = True
     
-    resp_para = doc.add_paragraph(f'3. The preparation and presentation of the Statement of Net Worth ("the Statement") as at {data.certificate_date} are the responsibility of the individual, including the preparation and maintenance of all relevant supporting records and documents. This responsibility includes the design, implementation and maintenance of adequate internal controls relevant to the accuracy and completeness of the Statement.')
+    resp_para = doc.add_paragraph(f'3. The individual is responsible for preparing the Statement of Net Worth ("the Statement") as at {data.certificate_date} and for maintaining adequate records and internal controls to support the accuracy and completeness of the information contained therein.')
     resp_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     
     # Practitioner's Responsibility
@@ -471,14 +511,8 @@ def generate_networth_certificate(data: NetWorthData) -> Document:
     run.bold = True
     run.underline = True
     
-    prac_para = doc.add_paragraph(f'4. It is my/our responsibility to examine the Statement of Net Worth prepared by the individual as at {data.certificate_date} and to certify whether the same is based on relevant supporting records and documents as made available to us.')
+    prac_para = doc.add_paragraph(f'4. My/our responsibility is to examine and certify the Statement of Net Worth as at {data.certificate_date} based on the supporting documents provided. The examination was performed in accordance with the ICAI Guidance Note on Reports or Certificates for Special Purposes, and in compliance with the ICAI Code of Ethics. I/we have also followed the relevant requirements of SQC 1 relating to quality control.')
     prac_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    
-    guide_para = doc.add_paragraph('5. I/we conducted my/our examination of the Statement in accordance with the Guidance Note on Reports or Certificates for Special Purposes (Revised 2016) issued by the Institute of Chartered Accountants of India ("ICAI"). The Guidance Note requires that I/we comply with the ethical requirements of the Code of Ethics issued by ICAI.')
-    guide_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    
-    sqc_para = doc.add_paragraph('6. I/we have complied with the relevant applicable requirements of the Standard on Quality Control (SQC) 1, Quality Control for Firms that Perform Audits and Reviews of Historical Financial Information, and Other Assurance and Related Services Engagements.')
-    sqc_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     
     # Opinion
     para = doc.add_paragraph()
@@ -487,7 +521,7 @@ def generate_networth_certificate(data: NetWorthData) -> Document:
     run.underline = True
     
     name_with_passport = f"{data.individual_name} (Passport No.: {data.passport_number})" if data.passport_number else data.individual_name
-    opinion_para = doc.add_paragraph(f'7. Based on my/our examination as above and the information and explanations given to me/us, I/we certify that the Statement of Net Worth of Mr./Ms. {name_with_passport} as at {data.certificate_date} annexed herewith shows a Net Worth of Rs. {data.net_worth_inr:,.2f} (Rupees {convert_to_words(data.net_worth_inr)} only) which has been computed on the basis of the details, representations, and documents made available to me/us by the individual.')
+    opinion_para = doc.add_paragraph(f'7. On the basis of the examination carried out and the information and explanations furnished to me/us, I/we certify that the annexed Statement of Net Worth of Mr./Ms. {name_with_passport} as at {data.certificate_date} presents a Net Worth of ₹{data.net_worth_inr:,.2f}, derived from the records, representations and supporting documents provided by the individual.')
     opinion_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     
     # Restriction on Use
@@ -496,7 +530,7 @@ def generate_networth_certificate(data: NetWorthData) -> Document:
     run.bold = True
     run.underline = True
     
-    restrict_para = doc.add_paragraph(f'8. This Certificate has been issued at the request of the individual for submission to {data.embassy_name} for VISA application purpose. This Certificate should not be used for any other purpose or by any person other than the addressee of this Certificate. Accordingly, I/we do not accept or assume any liability or any duty of care for any other purpose or to any other person to whom this Certificate is shown or into whose hands it may come without my/our prior consent in writing.')
+    restrict_para = doc.add_paragraph(f'8. This Certificate is prepared at the individual\'s request for submission to {data.embassy_name} for VISA processing. It is restricted to this purpose only and is not intended for any other use. No responsibility or liability is accepted towards any person other than the specified addressee without my/our written consent.')
     restrict_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     
     doc.add_paragraph()
@@ -681,17 +715,17 @@ def generate_annexures(doc, data: NetWorthData):
     if categories:
         # Create table with header + data rows + total row
         table = add_table_with_borders(doc, len(categories) + 2, 5)
-        
-        # Header row
-        headers = ['Sr. No.', 'Particulars', 'Sub-Annexure', 'Amount in INR', f'Amount in {data.foreign_currency}@ {data.exchange_rate} INR']
-        for i, header in enumerate(headers):
-            cell = table.rows[0].cells[i]
-            if header == 'Sr. No.':
-                cell.text = 'Sr.\nNo.'
-            else:
-                cell.text = header
-            cell.paragraphs[0].runs[0].bold = True
-        
+    
+    # Header row
+    headers = ['Sr. No.', 'Particulars', 'Sub-Annexure', 'Amount in INR', f'Amount in {data.foreign_currency}@ {data.exchange_rate} INR']
+    for i, header in enumerate(headers):
+        cell = table.rows[0].cells[i]
+        if header == 'Sr. No.':
+            cell.text = 'Sr.\nNo.'
+        else:
+            cell.text = header
+        cell.paragraphs[0].runs[0].bold = True
+    
         enforce_sr_no_column_width(table, headers)
         
         # Data rows - only for categories with data
@@ -759,6 +793,12 @@ def generate_annexures(doc, data: NetWorthData):
         cell = table.rows[last_row].cells[5]
         cell.text = f'{data.total_bank_balance_foreign:,.2f}'
         cell.paragraphs[0].runs[0].bold = True
+        
+        # Add notes if provided
+        if data.bank_accounts_notes:
+            doc.add_paragraph()
+            notes_para = doc.add_paragraph(f'Notes: {data.bank_accounts_notes}')
+            notes_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     
     # Sub Annexure B - Insurance Policies
     if data.insurance_policies:
@@ -797,6 +837,12 @@ def generate_annexures(doc, data: NetWorthData):
         cell.text = f'{data.total_insurance_foreign:,.2f}'
         cell.paragraphs[0].runs[0].bold = True
     
+        # Add notes if provided
+        if data.insurance_policies_notes:
+            doc.add_paragraph()
+            notes_para = doc.add_paragraph(f'Notes: {data.insurance_policies_notes}')
+            notes_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    
     # Sub Annexure C - P.F. Accounts
     if data.pf_accounts:
         doc.add_paragraph()
@@ -832,6 +878,12 @@ def generate_annexures(doc, data: NetWorthData):
         cell = table.rows[last_row].cells[4]
         cell.text = f'{data.total_pf_accounts_foreign:,.2f}'
         cell.paragraphs[0].runs[0].bold = True
+        
+        # Add notes if provided
+        if data.pf_accounts_notes:
+            doc.add_paragraph()
+            notes_para = doc.add_paragraph(f'Notes: {data.pf_accounts_notes}')
+            notes_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
 
     # Sub Annexure D - Deposits
     if data.deposits:
@@ -868,6 +920,12 @@ def generate_annexures(doc, data: NetWorthData):
         cell = table.rows[last_row].cells[4]
         cell.text = f'{data.total_deposits_foreign:,.2f}'
         cell.paragraphs[0].runs[0].bold = True
+        
+        # Add notes if provided
+        if data.deposits_notes:
+            doc.add_paragraph()
+            notes_para = doc.add_paragraph(f'Notes: {data.deposits_notes}')
+            notes_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     
     # Sub Annexure E - NPS
     if data.nps_accounts:
@@ -904,6 +962,12 @@ def generate_annexures(doc, data: NetWorthData):
         cell = table.rows[last_row].cells[4]
         cell.text = f'{data.total_nps_foreign:,.2f}'
         cell.paragraphs[0].runs[0].bold = True
+        
+        # Add notes if provided
+        if data.nps_accounts_notes:
+            doc.add_paragraph()
+            notes_para = doc.add_paragraph(f'Notes: {data.nps_accounts_notes}')
+            notes_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
 
     # Sub Annexure F - Investment in Mutual Fund
     if data.mutual_funds:
@@ -941,6 +1005,12 @@ def generate_annexures(doc, data: NetWorthData):
         cell = table.rows[last_row].cells[5]
         cell.text = f'{data.total_mutual_funds_foreign:,.2f}'
         cell.paragraphs[0].runs[0].bold = True
+        
+        # Add notes if provided
+        if data.mutual_funds_notes:
+            doc.add_paragraph()
+            notes_para = doc.add_paragraph(f'Notes: {data.mutual_funds_notes}')
+            notes_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
 
     # Sub Annexure G - Gold
     if data.gold_holdings:
@@ -983,6 +1053,12 @@ def generate_annexures(doc, data: NetWorthData):
         if data.gold_holdings and data.gold_holdings[0].valuation_date:
             valuer_para = doc.add_paragraph(f'As per the Property Valuation Certificates dated {data.gold_holdings[0].valuation_date} issued by Approved Valuer {data.gold_holdings[0].valuer_name}')
             valuer_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        
+        # Add notes if provided
+        if data.gold_holdings_notes:
+            doc.add_paragraph()
+            notes_para = doc.add_paragraph(f'Notes: {data.gold_holdings_notes}')
+            notes_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     
     # Annexure (ii) - Immovable Assets
     if data.properties:
@@ -1022,6 +1098,12 @@ def generate_annexures(doc, data: NetWorthData):
         cell = table.rows[last_row].cells[3]
         cell.text = f'{data.total_immovable_assets_foreign:,.2f}'
         cell.paragraphs[0].runs[0].bold = True
+        
+        # Add notes if provided
+        if data.properties_notes:
+            doc.add_paragraph()
+            notes_para = doc.add_paragraph(f'Notes: {data.properties_notes}')
+            notes_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     
     # Annexure (iii) - Liabilities
     if data.liabilities:
@@ -1055,6 +1137,12 @@ def generate_annexures(doc, data: NetWorthData):
         cell = table.rows[last_row].cells[3]
         cell.text = f'{data.total_liabilities_inr:,.2f}'
         cell.paragraphs[0].runs[0].bold = True
+        
+        # Add notes if provided
+        if data.liabilities_notes:
+            doc.add_paragraph()
+            notes_para = doc.add_paragraph(f'Notes: {data.liabilities_notes}')
+            notes_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     
     # Net Worth Calculation
     doc.add_paragraph()
@@ -1319,10 +1407,6 @@ def main():
     query_params = st.query_params
     test_mode = query_params.get('test', 'false').lower() == 'true'
 
-    # Theme management
-    if 'theme' not in st.session_state:
-        st.session_state.theme = 'light'
-
     # Auto-fill test data if in test mode
     if test_mode and 'data' not in st.session_state:
         auto_fill_test_data()
@@ -1341,45 +1425,31 @@ def main():
             </script>
             """, unsafe_allow_html=True)
 
-    # Theme toggle function
-    def toggle_theme():
-        st.session_state.theme = 'dark' if st.session_state.theme == 'light' else 'light'
-        st.rerun()
-
-    # Add theme selector in sidebar
-    with st.sidebar:
-        st.markdown("### 🎨 Theme Settings")
-        theme_options = ["☀️ Light Mode", "🌙 Dark Mode"]
-        current_theme_display = "☀️ Light Mode" if st.session_state.theme == 'light' else "🌙 Dark Mode"
-
-        if st.button(f"Switch to {theme_options[1] if st.session_state.theme == 'light' else theme_options[0]}",
-                     key="theme_toggle", use_container_width=True):
-            toggle_theme()
-
-        # Add extra spacing after theme toggle
-        st.markdown("<br><br>", unsafe_allow_html=True)
-
-    # Add custom CSS for Quicksand font and themes
+    # Add custom CSS for Quicksand font and enhanced modern UI
     light_theme_css = """
     @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&display=swap');
 
     * {
         font-family: 'Quicksand', sans-serif !important;
+        transition: all 0.2s ease-in-out;
     }
 
     .stTitle {
         font-family: 'Quicksand', sans-serif !important;
-        font-weight: 600 !important;
+        font-weight: 700 !important;
+        letter-spacing: -0.5px !important;
     }
 
     .stHeader {
         font-family: 'Quicksand', sans-serif !important;
-        font-weight: 500 !important;
+        font-weight: 600 !important;
+        letter-spacing: -0.3px !important;
     }
 
     .stSubheader {
         font-family: 'Quicksand', sans-serif !important;
-        font-weight: 500 !important;
+        font-weight: 600 !important;
+        letter-spacing: -0.2px !important;
     }
 
     .stText {
@@ -1392,7 +1462,8 @@ def main():
 
     .stButton button {
         font-family: 'Quicksand', sans-serif !important;
-        font-weight: 500 !important;
+        font-weight: 600 !important;
+        letter-spacing: 0.3px !important;
     }
 
     .stTextInput input {
@@ -1431,356 +1502,331 @@ def main():
         font-family: 'Quicksand', sans-serif !important;
     }
 
-    /* Light theme styles */
+    /* Enhanced App Background */
+    .stApp {
+        background: linear-gradient(135deg, #ffe4b5 0%, #ffd89b 25%, #b0e0e6 50%, #98fb98 75%, #90ee90 100%) !important;
+        background-size: 400% 400% !important;
+        animation: gradientShift 15s ease infinite !important;
+        min-height: 100vh !important;
+    }
+
+    @keyframes gradientShift {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+    }
+
+    /* Main Container with Card Effect */
     .main .block-container {
         background-color: #ffffff !important;
         color: #212529 !important;
+        border-radius: 20px !important;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08) !important;
+        padding: 3rem 2.5rem !important;
+        margin-top: 2rem !important;
+        margin-bottom: 2rem !important;
+        max-width: 1200px !important;
     }
 
-    .stApp {
-        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
-    }
-
+    /* Enhanced Typography */
     .stTitle, .stHeader, .stSubheader {
-        color: #212529 !important;
-        font-weight: 600 !important;
+        color: #1a1a2e !important;
+        font-weight: 700 !important;
+        margin-bottom: 1rem !important;
     }
 
     .stText {
         color: #495057 !important;
+        line-height: 1.7 !important;
     }
 
     .stMarkdown {
         color: #495057 !important;
+        line-height: 1.7 !important;
     }
 
     .stMarkdown p {
         color: #495057 !important;
+        margin-bottom: 0.8rem !important;
     }
 
     .stMarkdown strong, .stMarkdown b {
-        color: #212529 !important;
-        font-weight: 600 !important;
+        color: #1a1a2e !important;
+        font-weight: 700 !important;
     }
 
-    /* Ensure all header-like elements are dark */
+    /* Headers */
     h1, h2, h3, h4, h5, h6 {
-        color: #212529 !important;
+        color: #1a1a2e !important;
+        font-weight: 700 !important;
     }
 
-    /* Bold text in general */
     b, strong {
-        color: #212529 !important;
-        font-weight: 600 !important;
+        color: #1a1a2e !important;
+        font-weight: 700 !important;
     }
 
+    /* Enhanced Buttons */
     .stButton button {
-        background-color: #007bff !important;
-        color: white !important;
+        background: linear-gradient(135deg, #ffb347 0%, #ffa07a 100%) !important;
+        color: #2c3e50 !important;
         border: none !important;
-        border-radius: 8px !important;
-        font-weight: 500 !important;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+        border-radius: 12px !important;
+        font-weight: 600 !important;
+        padding: 0.75rem 2rem !important;
+        box-shadow: 0 4px 15px rgba(255, 179, 71, 0.3) !important;
+        transition: all 0.3s ease !important;
+        letter-spacing: 0.5px !important;
     }
 
     .stButton button:hover {
-        background-color: #0056b3 !important;
-        box-shadow: 0 4px 8px rgba(0,0,0,0.15) !important;
+        transform: translateY(-2px) !important;
+        box-shadow: 0 6px 20px rgba(255, 179, 71, 0.4) !important;
+        background: linear-gradient(135deg, #ffa07a 0%, #ffb347 100%) !important;
     }
 
-    .stTextInput input, .stNumberInput input, .stTextArea textarea, .stSelectbox select {
-        background-color: #ffffff !important;
+    .stButton button:active {
+        transform: translateY(0) !important;
+    }
+
+    /* Enhanced Form Inputs */
+    .stTextInput input, .stNumberInput input, .stTextArea textarea, .stSelectbox select, .stDateInput input {
+        background-color: #f8f9fa !important;
         color: #495057 !important;
-        border: 2px solid #ced4da !important;
-        border-radius: 6px !important;
-        padding: 12px !important;
+        border: 2px solid #e9ecef !important;
+        border-radius: 12px !important;
+        padding: 14px 16px !important;
+        font-size: 15px !important;
+        transition: all 0.3s ease !important;
     }
 
-    .stTextInput input:focus, .stNumberInput input:focus, .stTextArea textarea:focus, .stSelectbox select:focus {
-        border-color: #007bff !important;
-        box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25) !important;
-    }
-
-    .stTabs [data-baseweb="tab-list"] {
+    .stTextInput input:hover, .stNumberInput input:hover, .stTextArea textarea:hover, .stSelectbox select:hover {
+        border-color: #ffb347 !important;
         background-color: #ffffff !important;
-        border-radius: 8px !important;
-        border: 1px solid #dee2e6 !important;
+    }
+
+    .stTextInput input:focus, .stNumberInput input:focus, .stTextArea textarea:focus, .stSelectbox select:focus, .stDateInput input:focus {
+        border-color: #ffb347 !important;
+        box-shadow: 0 0 0 4px rgba(255, 179, 71, 0.15) !important;
+        background-color: #ffffff !important;
+        outline: none !important;
+    }
+
+    /* Enhanced Tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        background-color: #f8f9fa !important;
+        border-radius: 16px !important;
+        border: none !important;
         padding: 8px !important;
+        box-shadow: inset 0 2px 4px rgba(0,0,0,0.06) !important;
+        margin-bottom: 2rem !important;
     }
 
     .stTabs [data-baseweb="tab"] {
-        color: #495057 !important;
+        color: #6c757d !important;
         background-color: transparent !important;
         border: none !important;
-        padding: 8px 16px !important;
-        margin: 2px !important;
-        border-radius: 6px !important;
+        padding: 12px 20px !important;
+        margin: 4px !important;
+        border-radius: 12px !important;
+        font-weight: 600 !important;
+        transition: all 0.3s ease !important;
+    }
+
+    .stTabs [data-baseweb="tab"]:hover {
+        background-color: rgba(255, 179, 71, 0.15) !important;
+        color: #ff8c00 !important;
     }
 
     .stTabs [aria-selected="true"] {
-        background-color: #007bff !important;
-        color: white !important;
+        background: linear-gradient(135deg, #ffb347 0%, #98fb98 100%) !important;
+        color: #2c3e50 !important;
+        box-shadow: 0 4px 12px rgba(255, 179, 71, 0.3) !important;
+        transform: translateY(-1px) !important;
     }
 
+    /* Enhanced Metrics */
     .stMetric {
-        background-color: #ffffff !important;
-        border: 1px solid #dee2e6 !important;
-        border-radius: 8px !important;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05) !important;
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%) !important;
+        border: 2px solid #e9ecef !important;
+        border-radius: 16px !important;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.08) !important;
+        padding: 1.5rem !important;
+        transition: all 0.3s ease !important;
+    }
+
+    .stMetric:hover {
+        transform: translateY(-4px) !important;
+        box-shadow: 0 8px 25px rgba(0,0,0,0.12) !important;
+        border-color: #98fb98 !important;
     }
 
     .stMetric .metric-value {
-        color: #007bff !important;
+        color: #32cd32 !important;
+        font-weight: 700 !important;
+        font-size: 1.5rem !important;
     }
 
+    /* Enhanced Expanders */
     .stExpander {
         background-color: #ffffff !important;
-        border: 1px solid #dee2e6 !important;
-        border-radius: 8px !important;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05) !important;
+        border: 2px solid #e9ecef !important;
+        border-radius: 16px !important;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.08) !important;
+        margin-bottom: 1rem !important;
+        overflow: hidden !important;
+    }
+
+    .stExpander:hover {
+        border-color: #ffb347 !important;
+        box-shadow: 0 6px 20px rgba(0,0,0,0.12) !important;
     }
 
     .stExpander header {
-        background-color: #f8f9fa !important;
-        border-radius: 8px 8px 0 0 !important;
+        background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%) !important;
+        border-radius: 16px 16px 0 0 !important;
+        padding: 1rem !important;
+        font-weight: 600 !important;
     }
 
+    /* Enhanced Alerts */
     .stAlert {
-        background-color: #d1ecf1 !important;
+        background: linear-gradient(135deg, #d1ecf1 0%, #bee5eb 100%) !important;
         color: #0c5460 !important;
-        border: 1px solid #bee5eb !important;
-        border-radius: 6px !important;
+        border: 2px solid #bee5eb !important;
+        border-radius: 12px !important;
+        padding: 1rem 1.5rem !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
     }
 
-    .sidebar .sidebar-content {
-        background-color: #ffffff !important;
-        border-right: 1px solid #dee2e6 !important;
-    }
-
-    .sidebar .sidebar-content .stMarkdown {
+    /* Form Labels */
+    .stTextInput label, .stNumberInput label, .stTextArea label, .stSelectbox label, .stDateInput label {
         color: #495057 !important;
+        font-weight: 600 !important;
+        font-size: 14px !important;
+        margin-bottom: 0.5rem !important;
+        letter-spacing: 0.3px !important;
     }
 
-    /* Form labels and help text */
-    .stTextInput label, .stNumberInput label, .stTextArea label, .stSelectbox label {
-        color: #495057 !important;
-        font-weight: 500 !important;
-    }
-
-    /* Success/Error messages */
+    /* Success/Error Messages */
     .stSuccess {
-        background-color: #d4edda !important;
+        background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%) !important;
         color: #155724 !important;
-        border: 1px solid #c3e6cb !important;
+        border: 2px solid #c3e6cb !important;
+        border-radius: 12px !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
     }
 
     .stError {
-        background-color: #f8d7da !important;
+        background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%) !important;
         color: #721c24 !important;
-        border: 1px solid #f5c6cb !important;
+        border: 2px solid #f5c6cb !important;
+        border-radius: 12px !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
     }
 
-    /* Checkbox and radio styling */
-    .stCheckbox, .stRadio {
-        color: #495057 !important;
-    }
-
-    /* Progress bars */
+    /* Progress Bars */
     .stProgress > div > div {
-        background-color: #007bff !important;
+        background: linear-gradient(135deg, #ffb347 0%, #98fb98 100%) !important;
+        border-radius: 10px !important;
     }
 
-    /* Additional text elements that might be white */
+    /* Additional Text Elements */
     .css-1v0mbdj, .css-1v0mbdj * {
         color: #495057 !important;
     }
 
-    /* Ensure all text in containers is properly colored */
     .css-1d391kg, .css-1d391kg * {
         color: #495057 !important;
     }
 
-    /* Fix for any remaining light text */
     [data-testid="stMarkdownContainer"] p {
         color: #495057 !important;
     }
 
     [data-testid="stMarkdownContainer"] strong {
-        color: #212529 !important;
+        color: #1a1a2e !important;
     }
 
-    /* Tab content text */
+    /* Tab Content */
     .stTabs [data-baseweb="tab-panel"] {
         color: #495057 !important;
+        padding: 1.5rem 0 !important;
     }
 
-    /* Sidebar text */
-    .sidebar .sidebar-content * {
+    /* Form Help Text */
+    .stTextInput div small, .stNumberInput div small, .stTextArea div small {
+        color: #6c757d !important;
+        font-size: 13px !important;
+    }
+
+    /* Hide Sidebar */
+    section[data-testid="stSidebar"] {
+        display: none !important;
+    }
+
+    /* Full Width Content */
+    .main .block-container {
+        padding-left: 2.5rem !important;
+        padding-right: 2.5rem !important;
+    }
+
+    /* Logo Container Enhancement */
+    [data-testid="stImage"] {
+        border-radius: 16px !important;
+        overflow: hidden !important;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.08) !important;
+    }
+
+    /* Horizontal Rule Enhancement */
+    hr {
+        border: none !important;
+        height: 2px !important;
+        background: linear-gradient(90deg, transparent, #ffb347, #98fb98, transparent) !important;
+        margin: 2rem 0 !important;
+    }
+
+    /* Column Spacing */
+    [data-testid="column"] {
+        padding: 0.5rem !important;
+    }
+
+    /* Checkbox and Radio */
+    .stCheckbox, .stRadio {
         color: #495057 !important;
     }
 
-    /* Form help text and descriptions */
-    .stTextInput div small, .stNumberInput div small, .stTextArea div small {
-        color: #6c757d !important;
+    .stCheckbox label, .stRadio label {
+        font-weight: 500 !important;
+    }
+
+    /* Divider Enhancement */
+    [data-testid="stHorizontalBlock"] {
+        margin: 1rem 0 !important;
+    }
+
+    /* Button Text Alignment - Prevent Wrapping */
+    .stButton button {
+        white-space: nowrap !important;
+        text-align: center !important;
+        word-wrap: normal !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+    }
+
+    /* Ensure button container doesn't cause wrapping */
+    [data-testid="stButton"] {
+        width: 100% !important;
+    }
+
+    [data-testid="stButton"] > button {
+        width: 100% !important;
+        min-width: fit-content !important;
     }
     """
 
-    dark_theme_css = """
-    @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&display=swap');
-
-    * {
-        font-family: 'Quicksand', sans-serif !important;
-    }
-
-    .stTitle {
-        font-family: 'Quicksand', sans-serif !important;
-        font-weight: 600 !important;
-    }
-
-    .stHeader {
-        font-family: 'Quicksand', sans-serif !important;
-        font-weight: 500 !important;
-    }
-
-    .stSubheader {
-        font-family: 'Quicksand', sans-serif !important;
-        font-weight: 500 !important;
-    }
-
-    .stText {
-        font-family: 'Quicksand', sans-serif !important;
-    }
-
-    .stMarkdown {
-        font-family: 'Quicksand', sans-serif !important;
-    }
-
-    .stButton button {
-        font-family: 'Quicksand', sans-serif !important;
-        font-weight: 500 !important;
-    }
-
-    .stTextInput input {
-        font-family: 'Quicksand', sans-serif !important;
-    }
-
-    .stNumberInput input {
-        font-family: 'Quicksand', sans-serif !important;
-    }
-
-    .stTextArea textarea {
-        font-family: 'Quicksand', sans-serif !important;
-    }
-
-    .stSelectbox select {
-        font-family: 'Quicksand', sans-serif !important;
-    }
-
-    .stDateInput input {
-        font-family: 'Quicksand', sans-serif !important;
-    }
-
-    .stMetric {
-        font-family: 'Quicksand', sans-serif !important;
-    }
-
-    .stExpander {
-        font-family: 'Quicksand', sans-serif !important;
-    }
-
-    .stTabs {
-        font-family: 'Quicksand', sans-serif !important;
-    }
-
-    .stTab {
-        font-family: 'Quicksand', sans-serif !important;
-    }
-
-    /* Dark theme styles */
-    .main .block-container {
-        background-color: #1a1a1a !important;
-        color: #ffffff !important;
-    }
-
-    .stApp {
-        background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%) !important;
-    }
-
-    .stTitle, .stHeader, .stSubheader {
-        color: #ffffff !important;
-    }
-
-    .stText {
-        color: #ffffff !important;
-    }
-
-    .stMarkdown {
-        color: #ffffff !important;
-    }
-
-    .stButton button {
-        background-color: #007bff !important;
-        color: white !important;
-        border: none !important;
-        border-radius: 8px !important;
-        font-weight: 500 !important;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
-    }
-
-    .stButton button:hover {
-        background-color: #0056b3 !important;
-        box-shadow: 0 4px 8px rgba(0,0,0,0.15) !important;
-    }
-
-    .stTextInput input, .stNumberInput input, .stTextArea textarea, .stSelectbox select {
-        background-color: #2d2d2d !important;
-        color: #ffffff !important;
-        border: 1px solid #404040 !important;
-        border-radius: 6px !important;
-    }
-
-    .stTabs [data-baseweb="tab-list"] {
-        background-color: #2d2d2d !important;
-        border-radius: 8px !important;
-    }
-
-    .stTabs [data-baseweb="tab"] {
-        color: #ffffff !important;
-    }
-
-    .stTabs [aria-selected="true"] {
-        background-color: #4CAF50 !important;
-        color: white !important;
-    }
-
-    .stMetric {
-        background-color: #2d2d2d !important;
-        border: 1px solid #404040 !important;
-        border-radius: 8px !important;
-    }
-
-    .stExpander {
-        background-color: #2d2d2d !important;
-        border: 1px solid #404040 !important;
-        border-radius: 8px !important;
-    }
-
-    .stAlert {
-        background-color: #1e3a8a !important;
-        color: #93c5fd !important;
-        border: 1px solid #3b82f6 !important;
-    }
-
-    .sidebar .sidebar-content {
-        background-color: #2d2d2d !important;
-    }
-    """
-
-    # Apply the appropriate theme CSS
-    if st.session_state.theme == 'light':
-        st.markdown(f"<style>{light_theme_css}</style>", unsafe_allow_html=True)
-    else:
-        st.markdown(f"<style>{dark_theme_css}</style>", unsafe_allow_html=True)
+    # Apply light theme CSS (always light mode)
+    st.markdown(f"<style>{light_theme_css}</style>", unsafe_allow_html=True)
 
     # Enhanced branding with optiCERTIFICATE logo
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -1805,7 +1851,12 @@ def main():
     new_fields = {
         'pf_accounts': [], 'deposits': [], 'nps_accounts': [], 'mutual_funds': [],
         'shares': [], 'vehicles': [], 'post_office_schemes': [], 'partnership_firms': [],
-        'passport_number': ''
+        'passport_number': '',
+        'bank_accounts_notes': '', 'insurance_policies_notes': '', 'pf_accounts_notes': '',
+        'deposits_notes': '', 'nps_accounts_notes': '', 'mutual_funds_notes': '',
+        'shares_notes': '', 'vehicles_notes': '', 'post_office_schemes_notes': '',
+        'partnership_firms_notes': '', 'gold_holdings_notes': '', 'properties_notes': '',
+        'liabilities_notes': ''
     }
     for field, default_value in new_fields.items():
         if not hasattr(st.session_state.data, field):
@@ -1931,7 +1982,7 @@ def main():
             
             with col2_rate:
                 st.markdown("<br>", unsafe_allow_html=True)  # Spacing
-                if st.button("🔄 Refresh Rate", help="Fetch latest exchange rate", key="refresh_rate_btn"):
+                if st.button("🔄 Refresh", help="Fetch latest exchange rate", key="refresh_rate_btn", use_container_width=True):
                     with st.spinner(f"Fetching latest rate for {selected_currency}..."):
                         fetched_rate = fetch_exchange_rate(selected_currency)
                         if fetched_rate:
@@ -2013,6 +2064,16 @@ def main():
             st.metric("Total Bank Balance (INR)", f"₹{st.session_state.data.total_bank_balance_inr:,.2f}")
         else:
             st.info("No bank accounts added yet")
+        
+        st.markdown("---")
+        st.subheader("Notes (Optional)")
+        st.session_state.data.bank_accounts_notes = st.text_area(
+            "Add any notes for Bank Accounts section",
+            value=st.session_state.data.bank_accounts_notes,
+            key="bank_accounts_notes",
+            height=100,
+            help="These notes will appear after the Bank Accounts table in the generated certificate"
+        )
     
     # Tab 3: Insurance Policies
     with tabs[2]:
@@ -2061,6 +2122,16 @@ def main():
         else:
             st.info("No insurance policies added yet")
     
+        st.markdown("---")
+        st.subheader("Notes (Optional)")
+        st.session_state.data.insurance_policies_notes = st.text_area(
+            "Add any notes for Insurance Policies section",
+            value=st.session_state.data.insurance_policies_notes,
+            key="insurance_policies_notes",
+            height=100,
+            help="These notes will appear after the Insurance Policies table in the generated certificate"
+        )
+    
     # Tab 4: P.F. Accounts
     with tabs[3]:
         st.header("Provident Fund (P.F.) Accounts")
@@ -2106,6 +2177,16 @@ def main():
             st.metric("Total P.F. Balance (INR)", f"₹{st.session_state.data.total_pf_accounts_inr:,.2f}")
         else:
             st.info("No P.F. accounts added yet")
+        
+        st.markdown("---")
+        st.subheader("Notes (Optional)")
+        st.session_state.data.pf_accounts_notes = st.text_area(
+            "Add any notes for P.F. Accounts section",
+            value=st.session_state.data.pf_accounts_notes,
+            key="pf_accounts_notes",
+            height=100,
+            help="These notes will appear after the P.F. Accounts table in the generated certificate"
+        )
 
     # Tab 5: Deposits
     with tabs[4]:
@@ -2152,6 +2233,16 @@ def main():
             st.metric("Total Deposit Value (INR)", f"₹{st.session_state.data.total_deposits_inr:,.2f}")
         else:
             st.info("No deposits added yet")
+        
+        st.markdown("---")
+        st.subheader("Notes (Optional)")
+        st.session_state.data.deposits_notes = st.text_area(
+            "Add any notes for Deposits section",
+            value=st.session_state.data.deposits_notes,
+            key="deposits_notes",
+            height=100,
+            help="These notes will appear after the Deposits table in the generated certificate"
+        )
 
     # Tab 6: NPS
     with tabs[5]:
@@ -2198,6 +2289,16 @@ def main():
             st.metric("Total NPS Value (INR)", f"₹{st.session_state.data.total_nps_inr:,.2f}")
         else:
             st.info("No NPS accounts added yet")
+        
+        st.markdown("---")
+        st.subheader("Notes (Optional)")
+        st.session_state.data.nps_accounts_notes = st.text_area(
+            "Add any notes for NPS section",
+            value=st.session_state.data.nps_accounts_notes,
+            key="nps_accounts_notes",
+            height=100,
+            help="These notes will appear after the NPS table in the generated certificate"
+        )
 
     # Tab 7: Mutual Funds
     with tabs[6]:
@@ -2246,6 +2347,16 @@ def main():
             st.metric("Total Mutual Fund Value (INR)", f"₹{st.session_state.data.total_mutual_funds_inr:,.2f}")
         else:
             st.info("No mutual funds added yet")
+        
+        st.markdown("---")
+        st.subheader("Notes (Optional)")
+        st.session_state.data.mutual_funds_notes = st.text_area(
+            "Add any notes for Mutual Funds section",
+            value=st.session_state.data.mutual_funds_notes,
+            key="mutual_funds_notes",
+            height=100,
+            help="These notes will appear after the Mutual Funds table in the generated certificate"
+        )
 
     # Tab 8: Shares
     with tabs[7]:
@@ -2289,6 +2400,16 @@ def main():
             st.metric("Total Shares Value (INR)", f"₹{st.session_state.data.total_shares_inr:,.2f}")
         else:
             st.info("No shares added yet")
+        
+        st.markdown("---")
+        st.subheader("Notes (Optional)")
+        st.session_state.data.shares_notes = st.text_area(
+            "Add any notes for Shares section",
+            value=st.session_state.data.shares_notes,
+            key="shares_notes",
+            height=100,
+            help="These notes will appear after the Shares table in the generated certificate"
+        )
 
     # Tab 9: Vehicles
     with tabs[8]:
@@ -2332,6 +2453,16 @@ def main():
             st.metric("Total Vehicle Value (INR)", f"₹{st.session_state.data.total_vehicles_inr:,.2f}")
         else:
             st.info("No vehicles added yet")
+        
+        st.markdown("---")
+        st.subheader("Notes (Optional)")
+        st.session_state.data.vehicles_notes = st.text_area(
+            "Add any notes for Vehicles section",
+            value=st.session_state.data.vehicles_notes,
+            key="vehicles_notes",
+            height=100,
+            help="These notes will appear after the Vehicles table in the generated certificate"
+        )
 
     # Tab 10: Post Office Schemes
     with tabs[9]:
@@ -2374,6 +2505,16 @@ def main():
             st.metric("Total Post Office Scheme Value (INR)", f"₹{st.session_state.data.total_post_office_inr:,.2f}")
         else:
             st.info("No schemes added yet")
+        
+        st.markdown("---")
+        st.subheader("Notes (Optional)")
+        st.session_state.data.post_office_schemes_notes = st.text_area(
+            "Add any notes for Post Office Schemes section",
+            value=st.session_state.data.post_office_schemes_notes,
+            key="post_office_schemes_notes",
+            height=100,
+            help="These notes will appear after the Post Office Schemes table in the generated certificate"
+        )
 
     # Tab 11: Partnership Firms
     with tabs[10]:
@@ -2410,6 +2551,16 @@ def main():
             st.metric("Total Partnership Firm Investment (INR)", f"₹{st.session_state.data.total_partnership_firms_inr:,.2f}")
         else:
             st.info("No firm investments added yet")
+        
+        st.markdown("---")
+        st.subheader("Notes (Optional)")
+        st.session_state.data.partnership_firms_notes = st.text_area(
+            "Add any notes for Partnership Firms section",
+            value=st.session_state.data.partnership_firms_notes,
+            key="partnership_firms_notes",
+            height=100,
+            help="These notes will appear after the Partnership Firms table in the generated certificate"
+        )
 
     # Tab 12: Gold/Valuables
     with tabs[11]:
@@ -2461,6 +2612,16 @@ def main():
             st.metric("Total Gold Value (INR)", f"₹{st.session_state.data.total_gold_inr:,.2f}")
         else:
             st.info("No gold holdings added yet")
+    
+        st.markdown("---")
+        st.subheader("Notes (Optional)")
+        st.session_state.data.gold_holdings_notes = st.text_area(
+            "Add any notes for Gold & Valuables section",
+            value=st.session_state.data.gold_holdings_notes,
+            key="gold_holdings_notes",
+            height=100,
+            help="These notes will appear after the Gold & Valuables table in the generated certificate"
+        )
     
     # Tab 13: Properties
     with tabs[12]:
@@ -2515,6 +2676,16 @@ def main():
         else:
             st.info("No properties added yet")
     
+        st.markdown("---")
+        st.subheader("Notes (Optional)")
+        st.session_state.data.properties_notes = st.text_area(
+            "Add any notes for Properties section",
+            value=st.session_state.data.properties_notes,
+            key="properties_notes",
+            height=100,
+            help="These notes will appear after the Properties table in the generated certificate"
+        )
+    
     # Tab 14: Liabilities
     with tabs[13]:
         st.header("Liabilities")
@@ -2559,6 +2730,16 @@ def main():
             st.metric("Total Liabilities (INR)", f"₹{st.session_state.data.total_liabilities_inr:,.2f}")
         else:
             st.info("No liabilities added - Net Worth will equal Total Assets")
+    
+        st.markdown("---")
+        st.subheader("Notes (Optional)")
+        st.session_state.data.liabilities_notes = st.text_area(
+            "Add any notes for Liabilities section",
+            value=st.session_state.data.liabilities_notes,
+            key="liabilities_notes",
+            height=100,
+            help="These notes will appear after the Liabilities table in the generated certificate"
+        )
     
     # Tab 15: Summary & Generate
     with tabs[14]:
