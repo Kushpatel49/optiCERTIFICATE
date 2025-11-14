@@ -379,28 +379,40 @@ def set_cell_border(cell, **kwargs):
             tcPr.append(element)
 
 def add_table_with_borders(doc, rows, cols):
-    """Add table with borders and fixed width"""
+    """Add table with borders and fixed width - optimized for Microsoft Word compatibility"""
     table = doc.add_table(rows=rows, cols=cols)
     table.style = 'Table Grid'
     table.autofit = False  # Disable autofit to set fixed width
+    
     # Set table width to 6.5 inches (standard width for Word documents)
     table.width = Inches(6.5)
     
-    # Smart column width management - set cell widths individually for better control
-    # Sr. No. column gets 0.6 inches (wider for better readability)
-    # Remaining columns share the rest proportionally
+    # Smart column width management for Microsoft Word compatibility
+    # Sr. No. column gets 0.5 inches, remaining columns share the rest proportionally
     if cols > 0:
-        total_width = Inches(6.5)
-        sr_no_width = Inches(0.4)  # Increased from 0.25 to 0.6 for better readability
-        remaining_width = total_width - sr_no_width
+        total_width_inches = 6.5
+        sr_no_width_inches = 0.5  # Optimal width for Sr. No. column
+        remaining_width_inches = total_width_inches - sr_no_width_inches
         
-        # Calculate width for other columns
+        # Calculate width for other columns in inches
         if cols > 1:
-            other_col_width = remaining_width / (cols - 1)
+            other_col_width_inches = remaining_width_inches / (cols - 1)
         else:
-            other_col_width = remaining_width
+            other_col_width_inches = remaining_width_inches
         
-        # Set width for each cell individually (more reliable than column.width)
+        # Set widths using Inches objects - Word handles this better
+        sr_no_width = Inches(sr_no_width_inches)
+        other_col_width = Inches(other_col_width_inches)
+        
+        # For Microsoft Word compatibility: set both column and cell widths
+        # Setting column width first, then individual cells for maximum compatibility
+        for i, column in enumerate(table.columns):
+            if i == 0:  # First column (Sr. No.)
+                column.width = sr_no_width
+            else:
+                column.width = other_col_width
+        
+        # Also set width for each cell individually (Word respects this better)
         for row in table.rows:
             for i, cell in enumerate(row.cells):
                 if i == 0:  # First column (Sr. No.)
@@ -438,11 +450,10 @@ def fetch_exchange_rate(currency: str) -> float:
         st.warning(f"Error fetching exchange rate: {str(e)}. Using default rate.")
         return None
 
-def enforce_sr_no_column_width(table, headers, width=Inches(0.25)):
-    """Ensure the Sr. No. column stays narrow to save space"""
-    if headers and headers[0].strip().startswith('Sr'):
-        for row in table.rows:
-            row.cells[0].width = width
+def enforce_sr_no_column_width(table, headers, width=Inches(0.5)):
+    """Ensure the Sr. No. column stays at optimal width - now handled in add_table_with_borders"""
+    # This function is kept for backward compatibility but widths are now set in add_table_with_borders
+    pass
 
 def generate_networth_certificate(data: NetWorthData) -> Document:
     """Generate the complete Net Worth Certificate document"""
