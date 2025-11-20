@@ -1,4 +1,4 @@
-streamlit==1.31.0
+streamlit==1.51.0
 python-docx==1.1.0
 dataclasses-json==0.6.3
 requests==2.31.0
