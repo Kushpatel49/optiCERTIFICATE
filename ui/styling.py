@@ -350,7 +350,6 @@ LIGHT_THEME_CSS = """
 
     /* Sidebar Styling */
     section[data-testid="stSidebar"] {
-        display: block !important;
         background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 245, 225, 0.9) 100%) !important;
         border-right: 1px solid rgba(255, 179, 71, 0.2) !important;
         box-shadow: 4px 0 15px rgba(0, 0, 0, 0.05) !important;
