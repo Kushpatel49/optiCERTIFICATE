@@ -2,3 +2,6 @@ streamlit==1.31.0
 python-docx==1.1.0
 dataclasses-json==0.6.3
 requests==2.31.0
+SQLAlchemy==2.0.36
+alembic==1.13.2
+psycopg2-binary==2.9.9

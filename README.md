@@ -10,6 +10,8 @@ A robust Streamlit application for generating Net Worth Certificates as per ICAI
 - 🔄 **Dynamic Forms** - Add unlimited bank accounts, properties, insurance policies, etc.
 - 📱 **User-Friendly Interface** - Clean, intuitive Streamlit UI with tabs
 - 📄 **Professional Output** - Generates formatted DOCX documents
+- 💾 **Persistent Storage** - Save generated certificates to SQLite (local) or Supabase Postgres (production)
+- 👥 **Client History** - Manage clients and reload prior certificates for rapid edits
 - ✓ **Validation** - Built-in validation to ensure all required fields are filled
 
 ## 📋 What It Generates
@@ -40,9 +42,8 @@ The application generates a complete Net Worth Certificate including:
    cd networth-certificate
    ```
 
-2. **Save the files**
-   - Save the main application code as `app.py`
-   - Save the requirements as `requirements.txt`
+2. **Project files**
+   - Ensure the repository structure is preserved (`streamlit_app.py`, `db/`, `alembic/`, etc.)
 
 3. **Install dependencies**
    ```bash
@@ -53,21 +54,62 @@ The application generates a complete Net Worth Certificate including:
 
 1. **Run the application**
    ```bash
-   streamlit run app.py
+   streamlit run streamlit_app.py
    ```
 
 2. **Open in browser**
    - The app will automatically open in your default browser
    - Usually at `http://localhost:8501`
 
-3. **Fill in the information**
+3. **Select or create a client**
+   - Use the sidebar to pick an existing client or add a new one
+   - Loading a client auto-populates their last saved certificate
+
+4. **Fill in the information**
    - Navigate through tabs to enter all required information
    - All calculations happen automatically
 
-4. **Generate certificate**
+5. **Generate certificate**
    - Review summary in the final tab
    - Click "Generate Net Worth Certificate"
    - Download the generated DOCX file
+
+## 🗄️ Database Persistence
+
+The application now stores generated certificates for later retrieval via the sidebar history.
+
+### Local Development (SQLite)
+
+- By default, the app creates `networth.db` at the project root.
+- Tables are auto-created on first run via SQLAlchemy `create_all()`.
+- No additional configuration is required for local testing.
+
+### Production (Supabase Postgres)
+
+1. Provision a Supabase project and note the *database connection string*.
+2. Create `.streamlit/secrets.toml` with:
+   ```toml
+   [database]
+   url = "postgresql+psycopg2://<user>:<password>@<host>:5432/<db>"
+   ```
+3. Run migrations:
+   ```bash
+   alembic upgrade head
+   ```
+4. Deploy / run Streamlit with the same `DATABASE_URL` (environment variable or secrets).
+
+### Alembic Management
+
+- Generate new migrations: `alembic revision --autogenerate -m "describe change"`
+- Apply migrations: `alembic upgrade head`
+- Downgrade: `alembic downgrade -1`
+
+## 👥 Client Management Workflow
+
+- Use the sidebar to **select an existing client** or **create a new client** before generating a certificate.
+- Loading a certificate from the sidebar repopulates every tab, allowing quick edits and regenerated reports without retyping.
+- Each generated certificate is versioned; the most recent entry is shown at the top of the client’s history.
+- The app enforces client selection when the database layer is active to ensure every certificate is associated with the correct person.
 
 ## 📝 Input Fields Guide
 
@@ -237,7 +279,7 @@ streamlit run app.py --server.port 8502
 
 4. **Currency Rates:** Update exchange rates regularly for accurate conversions.
 
-5. **Data Backup:** The app doesn't save data automatically. Generate the certificate before closing the browser.
+5. **Data Storage:** Certificates are persisted when a database is configured (SQLite/Supabase). If the database layer is unavailable, data remains session-scoped.
 
 ## 📄 Output Format
 
@@ -251,10 +293,9 @@ The generated document is a Microsoft Word (.docx) file that includes:
 
 ## 🔐 Data Privacy
 
-- All data processing happens locally in your browser/system
-- No data is sent to external servers
-- No data is stored permanently (session-based)
-- Generated documents are downloaded directly to your system
+- All data processing happens locally unless you configure Supabase Postgres.
+- When a remote database URL is supplied, certificate snapshots and DOCX binaries are stored in that database.
+- Generated documents are downloaded directly to your system; you can remove stored records via your database console if required.
 
 ## 📞 Support
 

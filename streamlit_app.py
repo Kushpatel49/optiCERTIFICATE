@@ -1,1418 +1,280 @@
-import streamlit as st
+"""
+Net Worth Certificate Generator - Main Streamlit Application
+"""
+
+import streamlit as st  # type: ignore[import-not-found]
 import datetime
-from dataclasses import dataclass, field
-from typing import List
-from docx import Document
-from docx.shared import Pt, Inches, RGBColor
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml.ns import qn
-from docx.oxml import OxmlElement, parse_xml
 import io
-import requests
-
-# CA Partner Details
-CA_PARTNERS = {
-    "CA HARSH B PATEL": {"membership_no": "600794"},
-    "CA PRERIT PAREKH": {"membership_no": "194438"}
-}
-
-# ==================== DATA MODELS ====================
-
-@dataclass
-class BankAccount:
-    holder_name: str
-    account_number: str
-    bank_name: str
-    balance_inr: float
-    statement_date: str = ""
-    
-    @property
-    def balance_foreign(self) -> float:
-        return self.balance_inr / st.session_state.get('exchange_rate', 63.34)
-
-@dataclass
-class InsurancePolicy:
-    holder_name: str
-    policy_number: str
-    amount_inr: float
-    
-    @property
-    def amount_foreign(self) -> float:
-        return self.amount_inr / st.session_state.get('exchange_rate', 63.34)
-
-@dataclass
-class PFAccount:
-    holder_name: str
-    pf_account_number: str
-    amount_inr: float
-    
-    @property
-    def amount_foreign(self) -> float:
-        return self.amount_inr / st.session_state.get('exchange_rate', 63.34)
-
-@dataclass
-class Deposit:
-    holder_name: str
-    account_number: str
-    amount_inr: float
-    
-    @property
-    def amount_foreign(self) -> float:
-        return self.amount_inr / st.session_state.get('exchange_rate', 63.34)
-
-@dataclass
-class NPSAccount:
-    owner_name: str
-    pran_number: str
-    amount_inr: float
-
-    @property
-    def amount_foreign(self) -> float:
-        return self.amount_inr / st.session_state.get('exchange_rate', 63.34)
-
-@dataclass
-class MutualFund:
-    holder_name: str
-    folio_number: str
-    policy_name: str
-    amount_inr: float
-
-    @property
-    def amount_foreign(self) -> float:
-        return self.amount_inr / st.session_state.get('exchange_rate', 63.34)
-
-@dataclass
-class Share:
-    company_name: str
-    num_shares: int
-    market_price_inr: float
-
-    @property
-    def amount_inr(self) -> float:
-        return self.num_shares * self.market_price_inr
-
-    @property
-    def amount_foreign(self) -> float:
-        return self.amount_inr / st.session_state.get('exchange_rate', 63.34)
-
-@dataclass
-class Vehicle:
-    vehicle_type: str
-    make_model_year: str
-    registration_number: str
-    market_value_inr: float
-
-    @property
-    def amount_foreign(self) -> float:
-        return self.market_value_inr / st.session_state.get('exchange_rate', 63.34)
-
-@dataclass
-class PostOfficeScheme:
-    scheme_type: str
-    account_number: str
-    amount_inr: float
-    
-    @property
-    def amount_foreign(self) -> float:
-        return self.amount_inr / st.session_state.get('exchange_rate', 63.34)
-
-@dataclass
-class GoldHolding:
-    owner_name: str
-    weight_grams: float
-    rate_per_10g: float
-    valuation_date: str = ""
-    valuer_name: str = ""
-    
-    @property
-    def amount_inr(self) -> float:
-        return (self.weight_grams / 10) * self.rate_per_10g
-    
-    @property
-    def amount_foreign(self) -> float:
-        return self.amount_inr / st.session_state.get('exchange_rate', 63.34)
-
-@dataclass
-class Property:
-    owner_name: str
-    property_type: str
-    address: str
-    valuation_inr: float
-    valuation_date: str = ""
-    valuer_name: str = ""
-    
-    @property
-    def valuation_foreign(self) -> float:
-        return self.valuation_inr / st.session_state.get('exchange_rate', 63.34)
-
-@dataclass
-class Liability:
-    description: str
-    amount_inr: float
-    details: str = ""
-
-@dataclass
-class PartnershipFirm:
-    firm_name: str
-    partner_name: str
-    holding_percentage: float
-    capital_balance_inr: float
-    valuation_date: str
-
-    @property
-    def amount_foreign(self) -> float:
-        return self.capital_balance_inr / st.session_state.get('exchange_rate', 63.34)
-
-@dataclass
-class NetWorthData:
-    # Personal Details
-    individual_name: str
-    individual_address: str
-    certificate_date: str
-    engagement_date: str
-    embassy_name: str
-    embassy_address: str
-    passport_number: str = ""
-    foreign_currency: str = "CAD"
-    exchange_rate: float = 63.34
-    
-    # Assets
-    bank_accounts: List[BankAccount] = field(default_factory=list)
-    insurance_policies: List[InsurancePolicy] = field(default_factory=list)
-    pf_accounts: List[PFAccount] = field(default_factory=list)
-    deposits: List[Deposit] = field(default_factory=list)
-    nps_accounts: List[NPSAccount] = field(default_factory=list)
-    mutual_funds: List[MutualFund] = field(default_factory=list)
-    shares: List[Share] = field(default_factory=list)
-    vehicles: List[Vehicle] = field(default_factory=list)
-    post_office_schemes: List[PostOfficeScheme] = field(default_factory=list)
-    partnership_firms: List[PartnershipFirm] = field(default_factory=list)
-    gold_holdings: List[GoldHolding] = field(default_factory=list)
-    properties: List[Property] = field(default_factory=list)
-    
-    # Liabilities
-    liabilities: List[Liability] = field(default_factory=list)
-    
-    # Notes for each category
-    bank_accounts_notes: str = ""
-    insurance_policies_notes: str = ""
-    pf_accounts_notes: str = ""
-    deposits_notes: str = ""
-    nps_accounts_notes: str = ""
-    mutual_funds_notes: str = ""
-    shares_notes: str = ""
-    vehicles_notes: str = ""
-    post_office_schemes_notes: str = ""
-    partnership_firms_notes: str = ""
-    gold_holdings_notes: str = ""
-    properties_notes: str = ""
-    liabilities_notes: str = ""
-    
-    # CA Details (Pre-filled)
-    ca_firm_name: str = "Patel Parekh & Associates"
-    ca_frn: str = "154335W"
-    ca_partner_name: str = "CA HARSH B PATEL"
-    ca_membership_no: str = "600794"
-    ca_designation: str = "Partner"
-    ca_place: str = "Vijapur"
-    
-    @property
-    def total_bank_balance_inr(self) -> float:
-        return sum(acc.balance_inr for acc in self.bank_accounts)
-    
-    @property
-    def total_bank_balance_foreign(self) -> float:
-        return self.total_bank_balance_inr / self.exchange_rate
-    
-    @property
-    def total_insurance_inr(self) -> float:
-        return sum(pol.amount_inr for pol in self.insurance_policies)
-    
-    @property
-    def total_insurance_foreign(self) -> float:
-        return self.total_insurance_inr / self.exchange_rate
-    
-    @property
-    def total_pf_accounts_inr(self) -> float:
-        return sum(acc.amount_inr for acc in self.pf_accounts)
-    
-    @property
-    def total_pf_accounts_foreign(self) -> float:
-        return self.total_pf_accounts_inr / self.exchange_rate
-
-    @property
-    def total_deposits_inr(self) -> float:
-        return sum(dep.amount_inr for dep in self.deposits)
-    
-    @property
-    def total_deposits_foreign(self) -> float:
-        return self.total_deposits_inr / self.exchange_rate
-    
-    @property
-    def total_nps_inr(self) -> float:
-        return sum(nps.amount_inr for nps in self.nps_accounts)
-
-    @property
-    def total_nps_foreign(self) -> float:
-        return self.total_nps_inr / self.exchange_rate
-
-    @property
-    def total_mutual_funds_inr(self) -> float:
-        return sum(mf.amount_inr for mf in self.mutual_funds)
-
-    @property
-    def total_mutual_funds_foreign(self) -> float:
-        return self.total_mutual_funds_inr / self.exchange_rate
-
-    @property
-    def total_shares_inr(self) -> float:
-        return sum(s.amount_inr for s in self.shares)
-
-    @property
-    def total_shares_foreign(self) -> float:
-        return self.total_shares_inr / self.exchange_rate
-
-    @property
-    def total_vehicles_inr(self) -> float:
-        return sum(v.market_value_inr for v in self.vehicles)
-
-    @property
-    def total_vehicles_foreign(self) -> float:
-        return self.total_vehicles_inr / self.exchange_rate
-
-    @property
-    def total_post_office_inr(self) -> float:
-        return sum(p.amount_inr for p in self.post_office_schemes)
-
-    @property
-    def total_post_office_foreign(self) -> float:
-        return self.total_post_office_inr / self.exchange_rate
-    
-    @property
-    def total_partnership_firms_inr(self) -> float:
-        return sum(f.capital_balance_inr for f in self.partnership_firms)
-
-    @property
-    def total_partnership_firms_foreign(self) -> float:
-        return self.total_partnership_firms_inr / self.exchange_rate
-    
-    @property
-    def total_gold_inr(self) -> float:
-        return sum(gold.amount_inr for gold in self.gold_holdings)
-    
-    @property
-    def total_gold_foreign(self) -> float:
-        return self.total_gold_inr / self.exchange_rate
-    
-    @property
-    def total_movable_assets_inr(self) -> float:
-        return (self.total_bank_balance_inr + 
-                self.total_insurance_inr + 
-                self.total_pf_accounts_inr + 
-                self.total_deposits_inr +
-                self.total_nps_inr +
-                self.total_mutual_funds_inr +
-                self.total_shares_inr +
-                self.total_vehicles_inr +
-                self.total_post_office_inr +
-                self.total_partnership_firms_inr +
-                self.total_gold_inr)
-    
-    @property
-    def total_movable_assets_foreign(self) -> float:
-        return self.total_movable_assets_inr / self.exchange_rate
-    
-    @property
-    def total_immovable_assets_inr(self) -> float:
-        return sum(prop.valuation_inr for prop in self.properties)
-    
-    @property
-    def total_immovable_assets_foreign(self) -> float:
-        return self.total_immovable_assets_inr / self.exchange_rate
-    
-    @property
-    def total_liabilities_inr(self) -> float:
-        return sum(liab.amount_inr for liab in self.liabilities)
-    
-    @property
-    def total_liabilities_foreign(self) -> float:
-        if self.exchange_rate == 0:
-            return 0.0
-        return self.total_liabilities_inr / self.exchange_rate
-    
-    @property
-    def net_worth_inr(self) -> float:
-        return self.total_movable_assets_inr + self.total_immovable_assets_inr - self.total_liabilities_inr
-    
-    @property
-    def net_worth_foreign(self) -> float:
-        return self.net_worth_inr / self.exchange_rate
-
-@dataclass
-class PartnershipFirm:
-    firm_name: str
-    partner_name: str
-    holding_percentage: float
-    capital_balance_inr: float
-    valuation_date: str
-
-    @property
-    def amount_foreign(self) -> float:
-        return self.capital_balance_inr / st.session_state.get('exchange_rate', 63.34)
-
-# ==================== DOCUMENT GENERATOR ====================
-
-def set_cell_border(cell, **kwargs):
-    """Set cell borders"""
-    tc = cell._tc
-    tcPr = tc.get_or_add_tcPr()
-    
-    for edge in ('top', 'left', 'bottom', 'right'):
-        edge_data = kwargs.get(edge)
-        if edge_data:
-            tag = 'tc{}'.format(edge.capitalize())
-            element = OxmlElement('w:{}'.format(tag))
-            element.set(qn('w:val'), 'single')
-            element.set(qn('w:sz'), '4')
-            element.set(qn('w:space'), '0')
-            element.set(qn('w:color'), '000000')
-            tcPr.append(element)
-
-def add_table_with_borders(doc, rows, cols):
-    """Add table with borders and fixed width - optimized for Microsoft Word compatibility"""
-    table = doc.add_table(rows=rows, cols=cols)
-    table.style = 'Table Grid'
-    table.autofit = False  # Disable autofit to set fixed width
-    
-    # Set table width to 6.5 inches (standard width for Word documents)
-    table.width = Inches(6.5)
-    
-    # Smart column width management for Microsoft Word compatibility
-    # Sr. No. column gets 0.5 inches, remaining columns share the rest proportionally
-    if cols > 0:
-        total_width_inches = 6.5
-        sr_no_width_inches = 0.5  # Optimal width for Sr. No. column
-        remaining_width_inches = total_width_inches - sr_no_width_inches
-        
-        # Calculate width for other columns in inches
-        if cols > 1:
-            other_col_width_inches = remaining_width_inches / (cols - 1)
-        else:
-            other_col_width_inches = remaining_width_inches
-        
-        # Set widths using Inches objects - Word handles this better
-        sr_no_width = Inches(sr_no_width_inches)
-        other_col_width = Inches(other_col_width_inches)
-        
-        # For Microsoft Word compatibility: set both column and cell widths
-        # Setting column width first, then individual cells for maximum compatibility
-        for i, column in enumerate(table.columns):
-            if i == 0:  # First column (Sr. No.)
-                column.width = sr_no_width
-            else:
-                column.width = other_col_width
-        
-        # Also set width for each cell individually (Word respects this better)
-        for row in table.rows:
-            for i, cell in enumerate(row.cells):
-                if i == 0:  # First column (Sr. No.)
-                    cell.width = sr_no_width
-                else:
-                    cell.width = other_col_width
-    
-    return table
-
-def fetch_exchange_rate(currency: str) -> float:
-    """Fetch real-time exchange rate from INR to the specified currency"""
-    try:
-        # Using exchangerate-api.com free endpoint (no API key required)
-        url = f"https://api.exchangerate-api.com/v4/latest/INR"
-        response = requests.get(url, timeout=5)
-        
-        if response.status_code == 200:
-            data = response.json()
-            rates = data.get('rates', {})
-            
-            # Get the rate for the selected currency
-            if currency in rates:
-                # Rate is how many units of foreign currency = 1 INR
-                # We need: how many INR = 1 foreign currency
-                # So we need to invert: 1 / rate
-                rate = 1.0 / rates[currency]
-                return round(rate, 2)
-            else:
-                st.warning(f"Currency {currency} not found in exchange rates. Using default rate.")
-                return None
-        else:
-            st.warning("Unable to fetch exchange rates. Using default rate.")
-            return None
-    except Exception as e:
-        st.warning(f"Error fetching exchange rate: {str(e)}. Using default rate.")
-        return None
-
-def enforce_sr_no_column_width(table, headers, width=Inches(0.5)):
-    """Ensure the Sr. No. column stays at optimal width - now handled in add_table_with_borders"""
-    # This function is kept for backward compatibility but widths are now set in add_table_with_borders
-    pass
-
-def generate_networth_certificate(data: NetWorthData) -> Document:
-    """Generate the complete Net Worth Certificate document"""
-    doc = Document()
-    
-    # Set default font
-    style = doc.styles['Normal']
-    font = style.font
-    font.name = 'Verdana'
-    font.size = Pt(11)
-    
-    # Title
-    title = doc.add_paragraph()
-    title_run = title.add_run("Independent Practitioner's Certificate on Net Worth where no Books of")
-    title_run.bold = True
-    title_run.underline = True
-    title_run.add_break()
-    title_run = title.add_run("Account have been maintained (For VISA Application Purpose)")
-    title_run.bold = True
-    title_run.underline = True
-    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    
-    doc.add_paragraph()
-    
-    # To Address
-    to_para = doc.add_paragraph('To')
-    to_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-
-    embassy_para = doc.add_paragraph(data.embassy_name)
-    embassy_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-
-    embassy_lines = data.embassy_address.split('\n')
-    for line in embassy_lines:
-        line_para = doc.add_paragraph(line)
-        line_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    
-    doc.add_paragraph()
-    
-    # Certificate Body
-    para = doc.add_paragraph()
-    run = para.add_run("Independent Practitioner's Certificate on Net Worth where no Books of")
-    run.underline = True
-    run.add_break()
-    run = para.add_run("Account have been maintained (For VISA Application Purpose)")
-    run.underline = True
-    
-    cert_para1 = doc.add_paragraph(f'1. This Certificate is issued in accordance with the terms of my/our engagement letter/agreement dated {data.engagement_date}.')
-    cert_para1.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    
-    name_with_passport = f"{data.individual_name} (Passport No.: {data.passport_number})" if data.passport_number else data.individual_name
-    cert_para2 = doc.add_paragraph(f'2. I/we have been engaged by Mr./Ms. {name_with_passport} (hereinafter referred to as the "individual") having residential address at {data.individual_address} to certify the Net Worth as at {data.certificate_date} for submission to {data.embassy_name} for VISA application purpose.')
-    cert_para2.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    
-    # Individual's Responsibility
-    para = doc.add_paragraph()
-    run = para.add_run("Individual's Responsibility")
-    run.bold = True
-    run.underline = True
-    
-    resp_para = doc.add_paragraph(f'3. The individual is responsible for preparing the Statement of Net Worth ("the Statement") as at {data.certificate_date} and for maintaining adequate records and internal controls to support the accuracy and completeness of the information contained therein.')
-    resp_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    
-    # Practitioner's Responsibility
-    para = doc.add_paragraph()
-    run = para.add_run("Practitioner's Responsibility")
-    run.bold = True
-    run.underline = True
-    
-    prac_para = doc.add_paragraph(f'4. My/our responsibility is to examine and certify the Statement of Net Worth as at {data.certificate_date} based on the supporting documents provided. The examination was performed in accordance with the ICAI Guidance Note on Reports or Certificates for Special Purposes, and in compliance with the ICAI Code of Ethics. I/we have also followed the relevant requirements of SQC 1 relating to quality control.')
-    prac_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    
-    # Opinion
-    para = doc.add_paragraph()
-    run = para.add_run("Opinion")
-    run.bold = True
-    run.underline = True
-    
-    name_with_passport = f"{data.individual_name} (Passport No.: {data.passport_number})" if data.passport_number else data.individual_name
-    opinion_para = doc.add_paragraph(f'7. On the basis of the examination carried out and the information and explanations furnished to me/us, I/we certify that the annexed Statement of Net Worth of Mr./Ms. {name_with_passport} as at {data.certificate_date} presents a Net Worth of ₹{data.net_worth_inr:,.2f}, derived from the records, representations and supporting documents provided by the individual.')
-    opinion_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    
-    # Restriction on Use
-    para = doc.add_paragraph()
-    run = para.add_run("Restriction on Use")
-    run.bold = True
-    run.underline = True
-    
-    restrict_para = doc.add_paragraph(f'8. This Certificate is prepared at the individual\'s request for submission to {data.embassy_name} for VISA processing. It is restricted to this purpose only and is not intended for any other use. No responsibility or liability is accepted towards any person other than the specified addressee without my/our written consent.')
-    restrict_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    
-    doc.add_paragraph()
-    doc.add_paragraph()
-    
-    # Signature Block
-    firm_para = doc.add_paragraph(f'FOR {data.ca_firm_name.upper()}')
-    firm_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-
-    ca_para = doc.add_paragraph('CHARTERED ACCOUNTANTS')
-    ca_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-
-    frn_para = doc.add_paragraph(f"FRN: {data.ca_frn}")
-    frn_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-
-    doc.add_paragraph()
-    doc.add_paragraph()
-
-    sig_table = doc.add_table(rows=4, cols=2)
-    sig_table.style = 'Table Grid'
-    sig_table.autofit = True
-
-    # Make table borders invisible using XML
-    for row in sig_table.rows:
-        for cell in row.cells:
-            # Set all borders to nil (invisible)
-            tcPr = cell._tc.get_or_add_tcPr()
-            tcBorders = parse_xml(r'<w:tcBorders xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
-                                  r'<w:top w:val="nil"/>'
-                                  r'<w:left w:val="nil"/>'
-                                  r'<w:bottom w:val="nil"/>'
-                                  r'<w:right w:val="nil"/>'
-                                  r'</w:tcBorders>')
-            tcPr.append(tcBorders)
-
-    # Left column - CA details
-    sig_table.rows[0].cells[0].text = f'{data.ca_partner_name.upper()}'
-    sig_table.rows[1].cells[0].text = f'{data.ca_designation.upper()}'
-    sig_table.rows[2].cells[0].text = f'MEMBERSHIP NO.: {data.ca_membership_no}'
-    sig_table.rows[3].cells[0].text = 'UDIN: [TO BE GENERATED]'
-
-    # Right column - Date and Place
-    sig_table.rows[0].cells[1].text = f'DATE: {data.certificate_date}'
-    sig_table.rows[0].cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
-
-    sig_table.rows[1].cells[1].text = f'PLACE: {data.ca_place.upper()}'
-    sig_table.rows[1].cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
-
-    # Leave bottom two cells in right column empty for spacing
-    sig_table.rows[2].cells[1].text = ''
-    sig_table.rows[3].cells[1].text = ''
-    
-    doc.add_paragraph()
-
-    name_with_passport = f"{data.individual_name} (Passport No.: {data.passport_number})" if data.passport_number else data.individual_name
-    enclosure_para = doc.add_paragraph(f'Enclosure: Statement of Net Worth of Mr./Ms. {name_with_passport} as at {data.certificate_date}')
-    enclosure_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    
-    # Add page break for annexures
-    doc.add_page_break()
-    
-    # Generate annexures
-    generate_annexures(doc, data)
-    
-    return doc
-
-def generate_annexures(doc, data: NetWorthData):
-    """Generate all annexures"""
-    
-    # Annexure Header
-    title = doc.add_paragraph()
-    title_run = title.add_run('Annexure – Statement of Net Worth')
-    title_run.bold = True
-    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    
-    doc.add_paragraph()
-
-    name_with_passport = f"{data.individual_name} (Passport No.: {data.passport_number})" if data.passport_number else data.individual_name
-    name_para = doc.add_paragraph(f'Name of Individual: {name_with_passport}')
-    name_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-
-    address_para = doc.add_paragraph(f'Address: {data.individual_address}')
-    address_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-
-    date_para = doc.add_paragraph(f'Date of Certificate: {data.certificate_date}')
-    date_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-
-    purpose_para = doc.add_paragraph(f'Purpose: VISA Application – Submission to {data.embassy_name}')
-    purpose_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    
-    doc.add_paragraph()
-
-    para = doc.add_paragraph()
-    run = para.add_run(f'Statement of Net Worth as at {data.certificate_date}')
-    run.bold = True
-    
-    doc.add_paragraph()
-    
-    # Summary - Net Worth Table
-    summary_title = doc.add_paragraph()
-    summary_title_run = summary_title.add_run('SUMMARY - NET WORTH')
-    summary_title_run.bold = True
-    summary_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    
-    doc.add_paragraph()
-    
-    # Create summary table: 4 rows (header + 3 data rows + 1 total row) = 5 rows, 4 columns
-    summary_table = add_table_with_borders(doc, 5, 4)
-    
-    # Header row
-    summary_headers = ['Particulars', f'Estimated Market Value (INR)', f'Estimated Market Value ({data.foreign_currency}@ {data.exchange_rate})', 'Annexure']
-    for i, header in enumerate(summary_headers):
-        cell = summary_table.rows[0].cells[i]
-        cell.text = header
-        cell.paragraphs[0].runs[0].bold = True
-    
-    # Row 1: Movable Assets
-    summary_table.rows[1].cells[0].text = 'Movable Assets'
-    summary_table.rows[1].cells[1].text = f'{data.total_movable_assets_inr:,.2f}'
-    summary_table.rows[1].cells[2].text = f'{data.total_movable_assets_foreign:,.2f}'
-    summary_table.rows[1].cells[3].text = '(i)'
-    
-    # Row 2: Immovable Assets
-    summary_table.rows[2].cells[0].text = 'Immovable Assets'
-    summary_table.rows[2].cells[1].text = f'{data.total_immovable_assets_inr:,.2f}'
-    summary_table.rows[2].cells[2].text = f'{data.total_immovable_assets_foreign:,.2f}'
-    summary_table.rows[2].cells[3].text = '(ii)'
-    
-    # Row 3: Liabilities
-    summary_table.rows[3].cells[0].text = 'Liabilities'
-    if data.total_liabilities_inr > 0:
-        summary_table.rows[3].cells[1].text = f'{data.total_liabilities_inr:,.2f}'
-        summary_table.rows[3].cells[2].text = f'{data.total_liabilities_foreign:,.2f}'
-    else:
-        summary_table.rows[3].cells[1].text = '-'
-        summary_table.rows[3].cells[2].text = '-'
-    summary_table.rows[3].cells[3].text = '(iii)'
-    
-    # Row 4: Total (i+ii-iii)
-    summary_table.rows[4].cells[0].text = 'Total (i+ii-iii)'
-    summary_table.rows[4].cells[0].paragraphs[0].runs[0].bold = True
-    summary_table.rows[4].cells[1].text = f'{data.net_worth_inr:,.2f}'
-    summary_table.rows[4].cells[1].paragraphs[0].runs[0].bold = True
-    summary_table.rows[4].cells[2].text = f'{data.net_worth_foreign:,.2f}'
-    summary_table.rows[4].cells[2].paragraphs[0].runs[0].bold = True
-    summary_table.rows[4].cells[3].text = ''
-    
-    doc.add_paragraph()
-    doc.add_paragraph()
-    
-    # Annexure (i) - Movable Assets Summary
-    para = doc.add_paragraph()
-    run = para.add_run('Annexure (i) - Movable Assets')
-    run.bold = True
-    
-    # Build list of categories with data
-    categories = []
-    if data.bank_accounts:
-        categories.append(('1', 'Bank Account', 'A', data.total_bank_balance_inr, data.total_bank_balance_foreign))
-    if data.insurance_policies:
-        categories.append(('2', 'LIC', 'B', data.total_insurance_inr, data.total_insurance_foreign))
-    if data.pf_accounts:
-        categories.append(('3', 'P.F. Account', 'C', data.total_pf_accounts_inr, data.total_pf_accounts_foreign))
-    if data.deposits:
-        categories.append(('4', 'Deposit', 'D', data.total_deposits_inr, data.total_deposits_foreign))
-    if data.nps_accounts:
-        categories.append(('5', 'NPS', 'E', data.total_nps_inr, data.total_nps_foreign))
-    if data.mutual_funds:
-        categories.append(('6', 'Investment in Mutual Fund', 'F', data.total_mutual_funds_inr, data.total_mutual_funds_foreign))
-    if data.shares:
-        categories.append(('7', 'Shares & Securities', 'G', data.total_shares_inr, data.total_shares_foreign))
-    if data.vehicles:
-        categories.append(('8', 'Vehicles', 'H', data.total_vehicles_inr, data.total_vehicles_foreign))
-    if data.post_office_schemes:
-        categories.append(('9', 'Post Office Schemes', 'I', data.total_post_office_inr, data.total_post_office_foreign))
-    if data.partnership_firms:
-        categories.append(('10', 'Investments in Partnership Firms', 'J', data.total_partnership_firms_inr, data.total_partnership_firms_foreign))
-    if data.gold_holdings:
-        categories.append(('11', 'Gold', 'K', data.total_gold_inr, data.total_gold_foreign))
-    
-    # Only create table if there are categories with data
-    if categories:
-        # Create table with header + data rows + total row
-        table = add_table_with_borders(doc, len(categories) + 2, 5)
-    
-    # Header row
-    headers = ['Sr. No.', 'Particulars', 'Sub-Annexure', 'Amount in INR', f'Amount in {data.foreign_currency}@ {data.exchange_rate} INR']
-    for i, header in enumerate(headers):
-        cell = table.rows[0].cells[i]
-        if header == 'Sr. No.':
-            cell.text = 'Sr.\nNo.'
-        else:
-            cell.text = header
-        cell.paragraphs[0].runs[0].bold = True
-    
-        enforce_sr_no_column_width(table, headers)
-        
-        # Data rows - only for categories with data
-        for idx, (sr_no, particular, sub_annexure, inr_amount, foreign_amount) in enumerate(categories, 1):
-            table.rows[idx].cells[0].text = sr_no
-            table.rows[idx].cells[1].text = particular
-            table.rows[idx].cells[2].text = sub_annexure
-            table.rows[idx].cells[3].text = f'{inr_amount:,.2f}'
-            table.rows[idx].cells[4].text = f'{foreign_amount:,.2f}'
-        
-        # Total row
-        total_row = len(categories) + 1
-        table.rows[total_row].cells[0].text = ''
-        cell = table.rows[total_row].cells[1]
-        cell.text = 'Total'
-        cell.paragraphs[0].runs[0].bold = True
-        table.rows[total_row].cells[2].text = ''
-        cell = table.rows[total_row].cells[3]
-        cell.text = f'{data.total_movable_assets_inr:,.2f}'
-        cell.paragraphs[0].runs[0].bold = True
-        cell = table.rows[total_row].cells[4]
-        cell.text = f'{data.total_movable_assets_foreign:,.2f}'
-        cell.paragraphs[0].runs[0].bold = True
-    else:
-        # If no movable assets, add a note
-        doc.add_paragraph('No movable assets to report.')
-    
-    # Sub Annexure A - Bank Accounts
-    if data.bank_accounts:
-        doc.add_paragraph()
-        para = doc.add_paragraph()
-        run = para.add_run('Sub Annexure (A) – Bank Account')
-        run.bold = True
-        table = add_table_with_borders(doc, len(data.bank_accounts) + 2, 6)
-        
-        # Headers
-        headers = ['Sr. No.', 'Name of the Account Holder', 'Account No.', 'Bank Name', 'Amount in INR', f'Amount in {data.foreign_currency}@ {data.exchange_rate} INR']
-        for i, header in enumerate(headers):
-            cell = table.rows[0].cells[i]
-            if header == 'Sr. No.':
-                cell.text = 'Sr.\nNo.'
-            else:
-                cell.text = header
-            cell.paragraphs[0].runs[0].bold = True
-        
-        enforce_sr_no_column_width(table, headers)
-        
-        # Data rows
-        for idx, acc in enumerate(data.bank_accounts, 1):
-            table.rows[idx].cells[0].text = str(idx)
-            table.rows[idx].cells[1].text = acc.holder_name
-            table.rows[idx].cells[2].text = acc.account_number
-            table.rows[idx].cells[3].text = acc.bank_name
-            table.rows[idx].cells[4].text = f'{acc.balance_inr:,.2f}'
-            table.rows[idx].cells[5].text = f'{acc.balance_foreign:,.2f}'
-        
-        # Total row
-        last_row = len(data.bank_accounts) + 1
-        cell = table.rows[last_row].cells[0]
-        cell.text = 'Total'
-        cell.paragraphs[0].runs[0].bold = True
-        cell = table.rows[last_row].cells[4]
-        cell.text = f'{data.total_bank_balance_inr:,.2f}'
-        cell.paragraphs[0].runs[0].bold = True
-        cell = table.rows[last_row].cells[5]
-        cell.text = f'{data.total_bank_balance_foreign:,.2f}'
-        cell.paragraphs[0].runs[0].bold = True
-        
-        # Add notes if provided
-        if data.bank_accounts_notes:
-            doc.add_paragraph()
-            notes_para = doc.add_paragraph(f'Notes: {data.bank_accounts_notes}')
-            notes_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    
-    # Sub Annexure B - Insurance Policies
-    if data.insurance_policies:
-        doc.add_paragraph()
-        para = doc.add_paragraph()
-        run = para.add_run('Sub Annexure (B): LIFE INSURANCE POLICIES')
-        run.bold = True
-        table = add_table_with_borders(doc, len(data.insurance_policies) + 2, 5)
-        
-        headers = ['Sr. No.', 'POLICY Holder', 'Policy No.', 'Amount in INR', f'Amount in {data.foreign_currency}@ {data.exchange_rate} INR']
-        for i, header in enumerate(headers):
-            cell = table.rows[0].cells[i]
-            if header == 'Sr. No.':
-                cell.text = 'Sr.\nNo.'
-            else:
-                cell.text = header
-            cell.paragraphs[0].runs[0].bold = True
-        
-        enforce_sr_no_column_width(table, headers)
-        
-        for idx, policy in enumerate(data.insurance_policies, 1):
-            table.rows[idx].cells[0].text = str(idx)
-            table.rows[idx].cells[1].text = policy.holder_name
-            table.rows[idx].cells[2].text = policy.policy_number
-            table.rows[idx].cells[3].text = f'{policy.amount_inr:,.2f}'
-            table.rows[idx].cells[4].text = f'{policy.amount_foreign:,.2f}'
-        
-        last_row = len(data.insurance_policies) + 1
-        cell = table.rows[last_row].cells[0]
-        cell.text = 'TOTAL'
-        cell.paragraphs[0].runs[0].bold = True
-        cell = table.rows[last_row].cells[3]
-        cell.text = f'{data.total_insurance_inr:,.2f}'
-        cell.paragraphs[0].runs[0].bold = True
-        cell = table.rows[last_row].cells[4]
-        cell.text = f'{data.total_insurance_foreign:,.2f}'
-        cell.paragraphs[0].runs[0].bold = True
-    
-        # Add notes if provided
-        if data.insurance_policies_notes:
-            doc.add_paragraph()
-            notes_para = doc.add_paragraph(f'Notes: {data.insurance_policies_notes}')
-            notes_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    
-    # Sub Annexure C - P.F. Accounts
-    if data.pf_accounts:
-        doc.add_paragraph()
-        para = doc.add_paragraph()
-        run = para.add_run('Sub Annexure (C) - P.F Account')
-        run.bold = True
-        table = add_table_with_borders(doc, len(data.pf_accounts) + 2, 5)
-        headers = ['Sr. No.', 'Name of the Account Holder', 'PF Account No.', 'Amount in INR', f'Amount in {data.foreign_currency}@ {data.exchange_rate} INR']
-        for i, header in enumerate(headers):
-            cell = table.rows[0].cells[i]
-            if header == 'Sr. No.':
-                cell.text = 'Sr.\nNo.'
-            else:
-                cell.text = header
-            cell.paragraphs[0].runs[0].bold = True
-        
-        enforce_sr_no_column_width(table, headers)
-        
-        for idx, acc in enumerate(data.pf_accounts, 1):
-            table.rows[idx].cells[0].text = str(idx)
-            table.rows[idx].cells[1].text = acc.holder_name
-            table.rows[idx].cells[2].text = acc.pf_account_number
-            table.rows[idx].cells[3].text = f'{acc.amount_inr:,.2f}'
-            table.rows[idx].cells[4].text = f'{acc.amount_foreign:,.2f}'
-        
-        last_row = len(data.pf_accounts) + 1
-        cell = table.rows[last_row].cells[0]
-        cell.text = 'Total'
-        cell.paragraphs[0].runs[0].bold = True
-        cell = table.rows[last_row].cells[3]
-        cell.text = f'{data.total_pf_accounts_inr:,.2f}'
-        cell.paragraphs[0].runs[0].bold = True
-        cell = table.rows[last_row].cells[4]
-        cell.text = f'{data.total_pf_accounts_foreign:,.2f}'
-        cell.paragraphs[0].runs[0].bold = True
-        
-        # Add notes if provided
-        if data.pf_accounts_notes:
-            doc.add_paragraph()
-            notes_para = doc.add_paragraph(f'Notes: {data.pf_accounts_notes}')
-            notes_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-
-    # Sub Annexure D - Deposits
-    if data.deposits:
-        doc.add_paragraph()
-        para = doc.add_paragraph()
-        run = para.add_run('Sub Annexure (D): Deposit')
-        run.bold = True
-        table = add_table_with_borders(doc, len(data.deposits) + 2, 5)
-        headers = ['Sr. No.', 'Name of Investment Holder', 'A/C Number', 'Amount in INR', f'Amount in {data.foreign_currency}@ {data.exchange_rate} INR']
-        for i, header in enumerate(headers):
-            cell = table.rows[0].cells[i]
-            if header == 'Sr. No.':
-                cell.text = 'Sr.\nNo.'
-            else:
-                cell.text = header
-            cell.paragraphs[0].runs[0].bold = True
-        
-        enforce_sr_no_column_width(table, headers)
-        
-        for idx, dep in enumerate(data.deposits, 1):
-            table.rows[idx].cells[0].text = str(idx)
-            table.rows[idx].cells[1].text = dep.holder_name
-            table.rows[idx].cells[2].text = dep.account_number
-            table.rows[idx].cells[3].text = f'{dep.amount_inr:,.2f}'
-            table.rows[idx].cells[4].text = f'{dep.amount_foreign:,.2f}'
-        
-        last_row = len(data.deposits) + 1
-        cell = table.rows[last_row].cells[0]
-        cell.text = 'Total'
-        cell.paragraphs[0].runs[0].bold = True
-        cell = table.rows[last_row].cells[3]
-        cell.text = f'{data.total_deposits_inr:,.2f}'
-        cell.paragraphs[0].runs[0].bold = True
-        cell = table.rows[last_row].cells[4]
-        cell.text = f'{data.total_deposits_foreign:,.2f}'
-        cell.paragraphs[0].runs[0].bold = True
-        
-        # Add notes if provided
-        if data.deposits_notes:
-            doc.add_paragraph()
-            notes_para = doc.add_paragraph(f'Notes: {data.deposits_notes}')
-            notes_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    
-    # Sub Annexure E - NPS
-    if data.nps_accounts:
-        doc.add_paragraph()
-        para = doc.add_paragraph()
-        run = para.add_run('Sub Annexure (E) - NPS')
-        run.bold = True
-        table = add_table_with_borders(doc, len(data.nps_accounts) + 2, 5)
-        headers = ['Sr. No.', 'Name of Owner', 'PRAN No.', 'Amount in INR', f'Amount in {data.foreign_currency}@ {data.exchange_rate} INR']
-        for i, header in enumerate(headers):
-            cell = table.rows[0].cells[i]
-            if header == 'Sr. No.':
-                cell.text = 'Sr.\nNo.'
-            else:
-                cell.text = header
-            cell.paragraphs[0].runs[0].bold = True
-        
-        enforce_sr_no_column_width(table, headers)
-        
-        for idx, nps in enumerate(data.nps_accounts, 1):
-            table.rows[idx].cells[0].text = str(idx)
-            table.rows[idx].cells[1].text = nps.owner_name
-            table.rows[idx].cells[2].text = nps.pran_number
-            table.rows[idx].cells[3].text = f'{nps.amount_inr:,.2f}'
-            table.rows[idx].cells[4].text = f'{nps.amount_foreign:,.2f}'
-        
-        last_row = len(data.nps_accounts) + 1
-        cell = table.rows[last_row].cells[0]
-        cell.text = 'Total'
-        cell.paragraphs[0].runs[0].bold = True
-        cell = table.rows[last_row].cells[3]
-        cell.text = f'{data.total_nps_inr:,.2f}'
-        cell.paragraphs[0].runs[0].bold = True
-        cell = table.rows[last_row].cells[4]
-        cell.text = f'{data.total_nps_foreign:,.2f}'
-        cell.paragraphs[0].runs[0].bold = True
-        
-        # Add notes if provided
-        if data.nps_accounts_notes:
-            doc.add_paragraph()
-            notes_para = doc.add_paragraph(f'Notes: {data.nps_accounts_notes}')
-            notes_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-
-    # Sub Annexure F - Investment in Mutual Fund
-    if data.mutual_funds:
-        doc.add_paragraph()
-        para = doc.add_paragraph()
-        run = para.add_run('Sub Annexure (F) - Investment in Mutual Fund')
-        run.bold = True
-        table = add_table_with_borders(doc, len(data.mutual_funds) + 2, 6)
-        headers = ['Sr. No.', 'Name of the Account Holder', 'Policy/Folio Number', 'Policy Name', 'Amount in INR', f'Amount in {data.foreign_currency}@ {data.exchange_rate} INR']
-        for i, header in enumerate(headers):
-            cell = table.rows[0].cells[i]
-            if header == 'Sr. No.':
-                cell.text = 'Sr.\nNo.'
-            else:
-                cell.text = header
-            cell.paragraphs[0].runs[0].bold = True
-        
-        enforce_sr_no_column_width(table, headers)
-
-        for idx, mf in enumerate(data.mutual_funds, 1):
-            table.rows[idx].cells[0].text = str(idx)
-            table.rows[idx].cells[1].text = mf.holder_name
-            table.rows[idx].cells[2].text = mf.folio_number
-            table.rows[idx].cells[3].text = mf.policy_name
-            table.rows[idx].cells[4].text = f'{mf.amount_inr:,.2f}'
-            table.rows[idx].cells[5].text = f'{mf.amount_foreign:,.2f}'
-
-        last_row = len(data.mutual_funds) + 1
-        cell = table.rows[last_row].cells[0]
-        cell.text = 'Total'
-        cell.paragraphs[0].runs[0].bold = True
-        cell = table.rows[last_row].cells[4]
-        cell.text = f'{data.total_mutual_funds_inr:,.2f}'
-        cell.paragraphs[0].runs[0].bold = True
-        cell = table.rows[last_row].cells[5]
-        cell.text = f'{data.total_mutual_funds_foreign:,.2f}'
-        cell.paragraphs[0].runs[0].bold = True
-        
-        # Add notes if provided
-        if data.mutual_funds_notes:
-            doc.add_paragraph()
-            notes_para = doc.add_paragraph(f'Notes: {data.mutual_funds_notes}')
-            notes_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-
-    # Sub Annexure G - Gold
-    if data.gold_holdings:
-        doc.add_paragraph()
-        para = doc.add_paragraph()
-        run = para.add_run('Sub Annexure (G) - Gold')
-        run.bold = True
-        table = add_table_with_borders(doc, len(data.gold_holdings) + 2, 6)
-        
-        headers = ['Sr. No.', 'Name of Party', 'Weight (gram)', 'Rate/10 g (Rs.)', 'Amount in INR', f'Amount in {data.foreign_currency}@ {data.exchange_rate} INR']
-        for i, header in enumerate(headers):
-            cell = table.rows[0].cells[i]
-            if header == 'Sr. No.':
-                cell.text = 'Sr.\nNo.'
-            else:
-                cell.text = header
-            cell.paragraphs[0].runs[0].bold = True
-        
-        enforce_sr_no_column_width(table, headers)
-        
-        for idx, gold in enumerate(data.gold_holdings, 1):
-            table.rows[idx].cells[0].text = str(idx)
-            table.rows[idx].cells[1].text = gold.owner_name
-            table.rows[idx].cells[2].text = f'{gold.weight_grams:.3f}'
-            table.rows[idx].cells[3].text = f'{gold.rate_per_10g:,.2f}'
-            table.rows[idx].cells[4].text = f'{gold.amount_inr:,.2f}'
-            table.rows[idx].cells[5].text = f'{gold.amount_foreign:,.2f}'
-        
-        last_row = len(data.gold_holdings) + 1
-        cell = table.rows[last_row].cells[0]
-        cell.text = 'Total'
-        cell.paragraphs[0].runs[0].bold = True
-        cell = table.rows[last_row].cells[4]
-        cell.text = f'{data.total_gold_inr:,.2f}'
-        cell.paragraphs[0].runs[0].bold = True
-        cell = table.rows[last_row].cells[5]
-        cell.text = f'{data.total_gold_foreign:,.2f}'
-        cell.paragraphs[0].runs[0].bold = True
-        
-        if data.gold_holdings and data.gold_holdings[0].valuation_date:
-            valuer_para = doc.add_paragraph(f'As per the Property Valuation Certificates dated {data.gold_holdings[0].valuation_date} issued by Approved Valuer {data.gold_holdings[0].valuer_name}')
-            valuer_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-        
-        # Add notes if provided
-        if data.gold_holdings_notes:
-            doc.add_paragraph()
-            notes_para = doc.add_paragraph(f'Notes: {data.gold_holdings_notes}')
-            notes_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    
-    # Annexure (ii) - Immovable Assets
-    if data.properties:
-        doc.add_paragraph()
-        para = doc.add_paragraph()
-        run = para.add_run('Annexure (ii) - Immovable Assets')
-        run.bold = True
-        table = add_table_with_borders(doc, len(data.properties) + 2, 4)
-        
-        headers = ['Sr. No.', 'Particulars of Property', 'Amount in INR', f'Amount in {data.foreign_currency}@ {data.exchange_rate} INR']
-        for i, header in enumerate(headers):
-            cell = table.rows[0].cells[i]
-            if header == 'Sr. No.':
-                cell.text = 'Sr.\nNo.'
-            else:
-                cell.text = header
-            cell.paragraphs[0].runs[0].bold = True
-        
-        enforce_sr_no_column_width(table, headers)
-        
-        for idx, prop in enumerate(data.properties, 1):
-            table.rows[idx].cells[0].text = str(idx)
-            property_text = f'{prop.owner_name}\n\n{prop.property_type}\n\n{prop.address}'
-            if prop.valuation_date and prop.valuer_name:
-                property_text += f'\n\n(Valuation as on {prop.valuation_date} by {prop.valuer_name})'
-            table.rows[idx].cells[1].text = property_text
-            table.rows[idx].cells[2].text = f'{prop.valuation_inr:,.2f}'
-            table.rows[idx].cells[3].text = f'{prop.valuation_foreign:,.2f}'
-        
-        last_row = len(data.properties) + 1
-        cell = table.rows[last_row].cells[0]
-        cell.text = 'Total'
-        cell.paragraphs[0].runs[0].bold = True
-        cell = table.rows[last_row].cells[2]
-        cell.text = f'{data.total_immovable_assets_inr:,.2f}'
-        cell.paragraphs[0].runs[0].bold = True
-        cell = table.rows[last_row].cells[3]
-        cell.text = f'{data.total_immovable_assets_foreign:,.2f}'
-        cell.paragraphs[0].runs[0].bold = True
-        
-        # Add notes if provided
-        if data.properties_notes:
-            doc.add_paragraph()
-            notes_para = doc.add_paragraph(f'Notes: {data.properties_notes}')
-            notes_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    
-    # Annexure (iii) - Liabilities
-    if data.liabilities:
-        doc.add_paragraph()
-        para = doc.add_paragraph()
-        run = para.add_run('Annexure (iii) - Liabilities')
-        run.bold = True
-        table = add_table_with_borders(doc, len(data.liabilities) + 2, 4)
-        
-        headers = ['Sr. No.', 'Description', 'Details', 'Amount in INR']
-        for i, header in enumerate(headers):
-            cell = table.rows[0].cells[i]
-            if header == 'Sr. No.':
-                cell.text = 'Sr.\nNo.'
-            else:
-                cell.text = header
-            cell.paragraphs[0].runs[0].bold = True
-        
-        enforce_sr_no_column_width(table, headers)
-        
-        for idx, liab in enumerate(data.liabilities, 1):
-            table.rows[idx].cells[0].text = str(idx)
-            table.rows[idx].cells[1].text = liab.description
-            table.rows[idx].cells[2].text = liab.details
-            table.rows[idx].cells[3].text = f'{liab.amount_inr:,.2f}'
-        
-        last_row = len(data.liabilities) + 1
-        cell = table.rows[last_row].cells[0]
-        cell.text = 'Total'
-        cell.paragraphs[0].runs[0].bold = True
-        cell = table.rows[last_row].cells[3]
-        cell.text = f'{data.total_liabilities_inr:,.2f}'
-        cell.paragraphs[0].runs[0].bold = True
-        
-        # Add notes if provided
-        if data.liabilities_notes:
-            doc.add_paragraph()
-            notes_para = doc.add_paragraph(f'Notes: {data.liabilities_notes}')
-            notes_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    
-    # Net Worth Calculation
-    doc.add_paragraph()
-    para = doc.add_paragraph()
-    run = para.add_run(f'Net Worth: ₹{data.net_worth_inr:,.2f}')
-    run.bold = True
-    run.font.size = Pt(14)
-    
-    # Notes
-    doc.add_paragraph()
-
-    notes_title = doc.add_paragraph('Notes:')
-    notes_title.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-
-    note1 = doc.add_paragraph('1. The above Statement is prepared based on details and supporting documents provided by the individual.')
-    note1.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-
-    note2 = doc.add_paragraph('2. Valuation of assets is based on self-declaration / available records and has not been independently verified unless specified.')
-    note2.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-
-    note3 = doc.add_paragraph(f'3. This Annexure should be read with the Certificate dated {data.certificate_date} issued by the undersigned.')
-    note3.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-
-    note4 = doc.add_paragraph('4. Loan documents and related confirmations were not made available for verification. As informed to us there is no any liability as on the date.')
-    note4.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-
-    note5 = doc.add_paragraph('5. The Information Furnished in the Certificate do not certify any Title Neither Ownership as we are not Legal Expert.')
-    note5.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    
-    doc.add_paragraph()
-    doc.add_paragraph()
-    
-    # Final Signature
-    final_firm_para = doc.add_paragraph(f'FOR, {data.ca_firm_name.upper()}')
-    final_firm_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-
-    final_ca_para = doc.add_paragraph('CHARTERED ACCOUNTANTS')
-    final_ca_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-
-    final_frn_para = doc.add_paragraph(f'FRN: {data.ca_frn}')
-    final_frn_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-
-    doc.add_paragraph()
-    doc.add_paragraph()
-
-    # Create two-column layout for signature
-    sig_table = doc.add_table(rows=4, cols=2)
-    sig_table.style = 'Table Grid'
-    sig_table.autofit = True
-
-    # Make table borders invisible using XML
-    for row in sig_table.rows:
-        for cell in row.cells:
-            # Set all borders to nil (invisible)
-            tcPr = cell._tc.get_or_add_tcPr()
-            tcBorders = parse_xml(r'<w:tcBorders xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
-                                  r'<w:top w:val="nil"/>'
-                                  r'<w:left w:val="nil"/>'
-                                  r'<w:bottom w:val="nil"/>'
-                                  r'<w:right w:val="nil"/>'
-                                  r'</w:tcBorders>')
-            tcPr.append(tcBorders)
-
-    # Left column - CA details
-    sig_table.rows[0].cells[0].text = f'{data.ca_partner_name.upper()}'
-    sig_table.rows[1].cells[0].text = f'{data.ca_designation.upper()}'
-    sig_table.rows[2].cells[0].text = f'MEMBERSHIP NO.: {data.ca_membership_no}'
-    sig_table.rows[3].cells[0].text = 'UDIN: [TO BE GENERATED]'
-
-    # Right column - Date and Place
-    sig_table.rows[0].cells[1].text = f'DATE: {data.certificate_date}'
-    sig_table.rows[0].cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
-
-    sig_table.rows[1].cells[1].text = f'PLACE: {data.ca_place.upper()}'
-    sig_table.rows[1].cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
-
-    # Leave bottom two cells in right column empty for spacing
-    sig_table.rows[2].cells[1].text = ''
-    sig_table.rows[3].cells[1].text = ''
-
-def convert_to_words(number):
-    """Convert number to words (simplified - for production use num2words library)"""
-    # This is a simplified version - in production, use num2words library
-    return f"{number:,.2f}"
-
-# ==================== STREAMLIT UI ====================
-
-def auto_fill_test_data():
-    """Auto-fill all form fields with comprehensive test data for testing"""
-    import datetime
-
-    # Initialize session state data
-    st.session_state.data = NetWorthData(
-        individual_name="Bharatkumar Dhulabhai Patel",
-        individual_address="29/B, Ratnamani Tenaments, Ahmedabad, Gujarat - 380001",
-        certificate_date=datetime.date.today().strftime("%d/%m/%Y"),
-        engagement_date=datetime.date.today().strftime("%d/%m/%Y"),
-        embassy_name="Canadian High Commission",
-        embassy_address="7/8 Shantipath, Chanakyapuri\nNew Delhi - 110021",
-        passport_number="A12345678",
-        foreign_currency="CAD",
-        exchange_rate=63.34
+import base64
+import json
+from typing import List
+
+# Import from organized modules
+from models import (
+    BankAccount,
+    InsurancePolicy,
+    PFAccount,
+    Deposit,
+    NPSAccount,
+    MutualFund,
+    Share,
+    Vehicle,
+    PostOfficeScheme,
+    PartnershipFirm,
+    GoldHolding,
+    Property,
+    Liability,
+    Individual,
+    NetWorthData,
+)
+from generators import generate_networth_certificate
+from utils import fetch_exchange_rate, auto_fill_test_data
+from config import CA_PARTNERS, SUPPORTED_CURRENCIES, DEFAULT_EXCHANGE_RATE
+from ui.styling import LIGHT_THEME_CSS
+
+try:
+    from db.engine import init_db
+    from db.repository import (
+        CertificateSummary,
+        RepositoryError,
+        get_certificate_detail,
+        list_certificates_for_person,
+        list_persons,
+        list_recent_certificates,
+        save_certificate,
+        save_person,
     )
 
-    # Bank Accounts
-    st.session_state.data.bank_accounts = [
-        BankAccount(
-            holder_name="Bharatkumar Dhulabhai Patel",
-            account_number="10733415306",
-            bank_name="State Bank of India",
-            balance_inr=1078118.46,
-            statement_date=datetime.date.today().strftime("%d/%m/%Y")
-        ),
-        BankAccount(
-            holder_name="Bharatkumar Dhulabhai Patel",
-            account_number="20093766850",
-            bank_name="HDFC Bank",
-            balance_inr=385989.69,
-            statement_date=datetime.date.today().strftime("%d/%m/%Y")
-        )
-    ]
+    DB_AVAILABLE = True
+    DB_IMPORT_ERROR: Exception | None = None
+except Exception as db_import_exc:
+    DB_AVAILABLE = False
+    DB_IMPORT_ERROR = db_import_exc
 
-    # Insurance Policies
-    st.session_state.data.insurance_policies = [
-        InsurancePolicy(
-            holder_name="Bharatkumar Dhulabhai Patel",
-            policy_number="71234567890",
-            amount_inr=253618.00
-        )
-    ]
+    class RepositoryError(RuntimeError):  # type: ignore[override]
+        """Fallback RepositoryError when DB layer is unavailable."""
 
-    # P.F. Accounts
-    st.session_state.data.pf_accounts = [
-        PFAccount(
-            holder_name="Bharatkumar Dhulabhai Patel",
-            pf_account_number="GJ/AMD/12345/678",
-            amount_inr=1850652.00
-        )
-    ]
+        pass
 
-    # Deposits
-    st.session_state.data.deposits = [
-        Deposit(
-            holder_name="Bharatkumar Dhulabhai Patel",
-            account_number="FD123456789",
-            amount_inr=1000000.00
-        )
-    ]
 
-    # NPS Accounts
-    st.session_state.data.nps_accounts = [
-        NPSAccount(
-            owner_name="Bharatkumar Dhulabhai Patel",
-            pran_number="110021379979",
-            amount_inr=2578706.52
-        )
-    ]
+def ensure_database_initialized() -> None:
+    """Ensure tables exist when using the local SQLite fallback."""
+    if not DB_AVAILABLE:
+        return
+    if st.session_state.get("_db_initialized"):
+        return
+    try:
+        init_db()
+        st.session_state["_db_initialized"] = True
+    except Exception as exc:  # pragma: no cover - defensive path
+        st.session_state["_db_initialized"] = False
+        st.session_state["_db_init_error"] = str(exc)
 
-    # Mutual Funds
-    st.session_state.data.mutual_funds = [
-        MutualFund(
-            holder_name="Bharatkumar Dhulabhai Patel",
-            folio_number="34521763/59",
-            policy_name="HDFC Flexi Cap Fund",
-            amount_inr=126662.88
-        )
-    ]
 
-    # Shares
-    st.session_state.data.shares = [
-        Share(
-            company_name="Reliance Industries Ltd",
-            num_shares=100,
-            market_price_inr=2450.00
-        ),
-        Share(
-            company_name="TCS Ltd",
-            num_shares=50,
-            market_price_inr=3200.00
-        )
-    ]
+def load_certificate_into_session(certificate_id: str) -> None:
+    """Load a stored certificate into the active Streamlit session."""
+    if not DB_AVAILABLE:
+        return
+    try:
+        detail = get_certificate_detail(certificate_id)
+    except Exception as exc:  # pragma: no cover - runtime defensive
+        st.sidebar.error(f"Failed to load certificate: {exc}")
+        return
 
-    # Vehicles
-    st.session_state.data.vehicles = [
-        Vehicle(
-            vehicle_type="Car",
-            make_model_year="Toyota Innova Crysta 2020",
-            registration_number="GJ01AB1234",
-            market_value_inr=1500000.00
-        )
-    ]
+    if detail is None:
+        st.sidebar.warning("Selected certificate could not be found.")
+        return
 
-    # Post Office Schemes
-    st.session_state.data.post_office_schemes = [
-        PostOfficeScheme(
-            scheme_type="National Savings Certificate (NSC)",
-            account_number="NSC123456789",
-            amount_inr=500000.00
-        )
-    ]
+    st.session_state.data = detail.data
+    st.session_state.previous_currency = detail.data.foreign_currency
+    st.session_state.exchange_rate = detail.data.exchange_rate
+    st.session_state.download_completed = False
+    st.session_state["_loaded_certificate_id"] = certificate_id
+    st.session_state["_show_load_notice"] = True
+    st.session_state.selected_certificate_id = certificate_id
+    if detail.person_id:
+        st.session_state.selected_person_id = detail.person_id
+    st.rerun()
 
-    # Partnership Firms
-    st.session_state.data.partnership_firms = [
-        PartnershipFirm(
-            firm_name="Patel Brothers Trading Co.",
-            partner_name="Bharatkumar Dhulabhai Patel",
-            holding_percentage=33.33,
-            capital_balance_inr=2000000.00,
-            valuation_date=datetime.date.today().strftime("%d/%m/%Y")
-        )
-    ]
 
-    # Gold Holdings
-    st.session_state.data.gold_holdings = [
-        GoldHolding(
-            owner_name="Bharatkumar Dhulabhai Patel",
-            weight_grams=399.570,
-            rate_per_10g=109500,
-            valuation_date=datetime.date.today().strftime("%d/%m/%Y"),
-            valuer_name="Approved Valuer - Ahmedabad"
-        )
-    ]
+def create_empty_networth_data() -> NetWorthData:
+    """Create a fresh NetWorthData object with today's dates and one blank individual."""
+    today_str = datetime.date.today().strftime("%d/%m/%Y")
+    return NetWorthData(
+        certificate_date=today_str,
+        engagement_date=today_str,
+        embassy_name="",
+        embassy_address="",
+        individuals=[
+            Individual(full_name="", passport_number="", address="")
+        ],
+    )
 
-    # Properties
-    st.session_state.data.properties = [
-        Property(
-            owner_name="Bharatkumar Dhulabhai Patel",
-            property_type="Residential House",
-            address="29/B, Ratnamani Tenaments, Survey No. 123, Ahmedabad",
-            valuation_inr=1260000,
-            valuation_date=datetime.date.today().strftime("%d/%m/%Y"),
-            valuer_name="Approved Valuer - Ahmedabad"
-        ),
-        Property(
-            owner_name="Bharatkumar Dhulabhai Patel",
-            property_type="Commercial Property",
-            address="Shop No. 5, Commercial Complex, SG Highway, Ahmedabad",
-            valuation_inr=2500000,
-            valuation_date=datetime.date.today().strftime("%d/%m/%Y"),
-            valuer_name="Approved Valuer - Ahmedabad"
-        )
-    ]
 
-    # Liabilities
-    st.session_state.data.liabilities = [
-        Liability(
-            description="Home Loan",
-            amount_inr=800000.00,
-            details="Housing loan from SBI for residential property"
-        )
-    ]
+CLIENT_DROPDOWN_PLACEHOLDER = "-- Select Client --"
+CERTIFICATE_DROPDOWN_PLACEHOLDER = "-- Select Certificate --"
 
-    print("✅ Test data auto-filled successfully!")
-    print(f"📊 Total Assets: ₹{st.session_state.data.total_movable_assets_inr + st.session_state.data.total_immovable_assets_inr:,.2f}")
-    print(f"💰 Net Worth: ₹{st.session_state.data.net_worth_inr:,.2f}")
-    print("🎯 Ready to generate certificate on Summary page!")
+
+def render_clients_sidebar() -> None:
+    """Render sidebar controls for managing clients and their certificates."""
+    sidebar = st.sidebar
+    sidebar.header("Clients & Certificates")
+
+    if not DB_AVAILABLE:
+        sidebar.info("Database storage is not configured yet.")
+        if DB_IMPORT_ERROR:
+            sidebar.caption(f"{DB_IMPORT_ERROR}")
+        return
+
+    ensure_database_initialized()
+    if st.session_state.get("_db_initialized") is False:
+        sidebar.warning("Database initialization failed. Check configuration.")
+        error_text = st.session_state.get("_db_init_error")
+        if error_text:
+            sidebar.caption(error_text)
+        return
+
+    if st.session_state.pop("_show_person_notice", False):
+        sidebar.success("Client created successfully.")
+
+    try:
+        persons = list_persons()
+    except Exception as exc:  # pragma: no cover - runtime defensive
+        sidebar.warning("Unable to fetch clients.")
+        sidebar.caption(str(exc))
+        persons = []
+
+    selected_person_id = st.session_state.get("selected_person_id")
+    person_label_map = {CLIENT_DROPDOWN_PLACEHOLDER: None}
+    person_options: List[str] = [CLIENT_DROPDOWN_PLACEHOLDER]
+    default_person_index = 0
+
+    for idx, person in enumerate(persons, start=1):
+        label = person.display_name
+        person_label_map[label] = person
+        person_options.append(label)
+        if selected_person_id == person.id:
+            default_person_index = idx
+
+    selection = sidebar.selectbox(
+        "Select client",
+        person_options,
+        index=default_person_index,
+        key="client_selectbox",
+    )
+
+    selected_person = person_label_map.get(selection)
+
+    if selected_person is None:
+        st.session_state.selected_person_id = None
+    else:
+        st.session_state.selected_person_id = selected_person.id
+        if selected_person.email:
+            sidebar.caption(f"Email: {selected_person.email}")
+        if selected_person.phone_number:
+            sidebar.caption(f"Phone: {selected_person.phone_number}")
+
+    reset_fields = st.session_state.pop("_reset_client_fields", False)
+    if reset_fields:
+        for key in ("new_client_name", "new_client_email", "new_client_phone"):
+            st.session_state.pop(key, None)
+
+    sidebar.markdown("---")
+    sidebar.subheader("Add New Client")
+    new_name = sidebar.text_input("Client Name", key="new_client_name")
+    new_email = sidebar.text_input("Email (optional)", key="new_client_email")
+    new_phone = sidebar.text_input("Phone (optional)", key="new_client_phone")
+
+    if sidebar.button("Create Client", key="create_client_button", use_container_width=True):
+        name = (new_name or "").strip()
+        email = (new_email or "").strip() or None
+        phone = (new_phone or "").strip() or None
+
+        if not name:
+            sidebar.warning("Enter a client name before creating.")
+        else:
+            try:
+                person = save_person(
+                    display_name=name,
+                    email=email,
+                    phone_number=phone,
+                )
+                st.session_state.selected_person_id = person.id
+                st.session_state.selected_certificate_id = None
+                st.session_state["_show_person_notice"] = True
+                st.session_state["_reset_client_fields"] = True
+                st.rerun()
+            except RepositoryError as exc:
+                sidebar.error(f"Could not create client: {exc}")
+            except Exception as exc:  # pragma: no cover - defensive
+                sidebar.error(f"Unexpected error creating client: {exc}")
+
+    sidebar.markdown("---")
+    sidebar.subheader("Certificates")
+
+    try:
+        if st.session_state.get("selected_person_id"):
+            summaries = list_certificates_for_person(
+                st.session_state["selected_person_id"], limit=20
+            )
+        else:
+            summaries = list_recent_certificates(limit=10)
+    except Exception as exc:  # pragma: no cover - runtime defensive
+        sidebar.warning("Unable to fetch certificates.")
+        sidebar.caption(str(exc))
+        return
+
+    if st.session_state.get("selected_person_id") and not summaries:
+        sidebar.caption("No certificates saved for this client yet.")
+    elif not summaries:
+        sidebar.caption("No certificates saved yet.")
+
+    cert_label_map: dict[str, CertificateSummary] = {}
+    cert_options: List[str] = [CERTIFICATE_DROPDOWN_PLACEHOLDER]
+    default_cert_index = 0
+    selected_certificate_id = st.session_state.get("selected_certificate_id")
+
+    for idx, summary in enumerate(summaries, start=1):
+        base_label = f"{summary.certificate_date} – ₹{summary.net_worth_inr:,.0f}"
+        if st.session_state.get("selected_person_id"):
+            label = base_label
+        else:
+            label = f"{summary.individual_name} — {base_label}"
+        cert_label_map[label] = summary
+        cert_options.append(label)
+        if selected_certificate_id == summary.id:
+            default_cert_index = idx
+
+    selection = sidebar.selectbox(
+        "Select certificate",
+        cert_options,
+        index=default_cert_index,
+        key="certificate_selectbox",
+    )
+
+    selected_summary = cert_label_map.get(selection)
+
+    if selected_summary:
+        st.session_state.selected_certificate_id = selected_summary.id
+        sidebar.caption(f"Net Worth (INR): ₹{selected_summary.net_worth_inr:,.2f}")
+        sidebar.caption(f"Created: {selected_summary.created_at}")
+
+    if selected_summary and sidebar.button(
+        "Load Certificate",
+        key=f"load_certificate_button_{selected_summary.id}",
+        use_container_width=True,
+    ):
+        load_certificate_into_session(selected_summary.id)
+
+# ==================== MAIN APPLICATION ====================
 
 def main():
     st.set_page_config(page_title="Net Worth Certificate Generator", layout="wide", page_icon="📄")
+
+    render_clients_sidebar()
+
+    if st.session_state.pop("_show_load_notice", False):
+        st.success("✅ Loaded saved certificate data.")
     
     # Check for test mode parameter
     query_params = st.query_params
@@ -1435,409 +297,88 @@ def main():
                 }, 1000); // Wait 1 second for data to load
             </script>
             """, unsafe_allow_html=True)
-
-    # Add custom CSS for Quicksand font and enhanced modern UI
-    light_theme_css = """
-    @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&display=swap');
-
-    * {
-        font-family: 'Quicksand', sans-serif !important;
-        transition: all 0.2s ease-in-out;
-    }
-
-    .stTitle {
-        font-family: 'Quicksand', sans-serif !important;
-        font-weight: 700 !important;
-        letter-spacing: -0.5px !important;
-    }
-
-    .stHeader {
-        font-family: 'Quicksand', sans-serif !important;
-        font-weight: 600 !important;
-        letter-spacing: -0.3px !important;
-    }
-
-    .stSubheader {
-        font-family: 'Quicksand', sans-serif !important;
-        font-weight: 600 !important;
-        letter-spacing: -0.2px !important;
-    }
-
-    .stText {
-        font-family: 'Quicksand', sans-serif !important;
-    }
-
-    .stMarkdown {
-        font-family: 'Quicksand', sans-serif !important;
-    }
-
-    .stButton button {
-        font-family: 'Quicksand', sans-serif !important;
-        font-weight: 600 !important;
-        letter-spacing: 0.3px !important;
-    }
-
-    .stTextInput input {
-        font-family: 'Quicksand', sans-serif !important;
-    }
-
-    .stNumberInput input {
-        font-family: 'Quicksand', sans-serif !important;
-    }
-
-    .stTextArea textarea {
-        font-family: 'Quicksand', sans-serif !important;
-    }
-
-    .stSelectbox select {
-        font-family: 'Quicksand', sans-serif !important;
-    }
-
-    .stDateInput input {
-        font-family: 'Quicksand', sans-serif !important;
-    }
-
-    .stMetric {
-        font-family: 'Quicksand', sans-serif !important;
-    }
-
-    .stExpander {
-        font-family: 'Quicksand', sans-serif !important;
-    }
-
-    .stTabs {
-        font-family: 'Quicksand', sans-serif !important;
-    }
-
-    .stTab {
-        font-family: 'Quicksand', sans-serif !important;
-    }
-
-    /* Enhanced App Background */
-    .stApp {
-        background: linear-gradient(135deg, #ffe4b5 0%, #ffd89b 25%, #b0e0e6 50%, #98fb98 75%, #90ee90 100%) !important;
-        background-size: 400% 400% !important;
-        animation: gradientShift 15s ease infinite !important;
-        min-height: 100vh !important;
-    }
-
-    @keyframes gradientShift {
-        0% { background-position: 0% 50%; }
-        50% { background-position: 100% 50%; }
-        100% { background-position: 0% 50%; }
-    }
-
-    /* Main Container with Card Effect */
-    .main .block-container {
-        background-color: #ffffff !important;
-        color: #212529 !important;
-        border-radius: 20px !important;
-        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08) !important;
-        padding: 3rem 2.5rem !important;
-        margin-top: 2rem !important;
-        margin-bottom: 2rem !important;
-        max-width: 1200px !important;
-    }
-
-    /* Enhanced Typography */
-    .stTitle, .stHeader, .stSubheader {
-        color: #1a1a2e !important;
-        font-weight: 700 !important;
-        margin-bottom: 1rem !important;
-    }
-
-    .stText {
-        color: #495057 !important;
-        line-height: 1.7 !important;
-    }
-
-    .stMarkdown {
-        color: #495057 !important;
-        line-height: 1.7 !important;
-    }
-
-    .stMarkdown p {
-        color: #495057 !important;
-        margin-bottom: 0.8rem !important;
-    }
-
-    .stMarkdown strong, .stMarkdown b {
-        color: #1a1a2e !important;
-        font-weight: 700 !important;
-    }
-
-    /* Headers */
-    h1, h2, h3, h4, h5, h6 {
-        color: #1a1a2e !important;
-        font-weight: 700 !important;
-    }
-
-    b, strong {
-        color: #1a1a2e !important;
-        font-weight: 700 !important;
-    }
-
-    /* Enhanced Buttons */
-    .stButton button {
-        background: linear-gradient(135deg, #ffb347 0%, #ffa07a 100%) !important;
-        color: #2c3e50 !important;
-        border: none !important;
-        border-radius: 12px !important;
-        font-weight: 600 !important;
-        padding: 0.75rem 2rem !important;
-        box-shadow: 0 4px 15px rgba(255, 179, 71, 0.3) !important;
-        transition: all 0.3s ease !important;
-        letter-spacing: 0.5px !important;
-    }
-
-    .stButton button:hover {
-        transform: translateY(-2px) !important;
-        box-shadow: 0 6px 20px rgba(255, 179, 71, 0.4) !important;
-        background: linear-gradient(135deg, #ffa07a 0%, #ffb347 100%) !important;
-    }
-
-    .stButton button:active {
-        transform: translateY(0) !important;
-    }
-
-    /* Enhanced Form Inputs */
-    .stTextInput input, .stNumberInput input, .stTextArea textarea, .stSelectbox select, .stDateInput input {
-        background-color: #f8f9fa !important;
-        color: #495057 !important;
-        border: 2px solid #e9ecef !important;
-        border-radius: 12px !important;
-        padding: 14px 16px !important;
-        font-size: 15px !important;
-        transition: all 0.3s ease !important;
-    }
-
-    .stTextInput input:hover, .stNumberInput input:hover, .stTextArea textarea:hover, .stSelectbox select:hover {
-        border-color: #ffb347 !important;
-        background-color: #ffffff !important;
-    }
-
-    .stTextInput input:focus, .stNumberInput input:focus, .stTextArea textarea:focus, .stSelectbox select:focus, .stDateInput input:focus {
-        border-color: #ffb347 !important;
-        box-shadow: 0 0 0 4px rgba(255, 179, 71, 0.15) !important;
-        background-color: #ffffff !important;
-        outline: none !important;
-    }
-
-    /* Enhanced Tabs */
-    .stTabs [data-baseweb="tab-list"] {
-        background-color: #f8f9fa !important;
-        border-radius: 16px !important;
-        border: none !important;
-        padding: 8px !important;
-        box-shadow: inset 0 2px 4px rgba(0,0,0,0.06) !important;
-        margin-bottom: 2rem !important;
-    }
-
-    .stTabs [data-baseweb="tab"] {
-        color: #6c757d !important;
-        background-color: transparent !important;
-        border: none !important;
-        padding: 12px 20px !important;
-        margin: 4px !important;
-        border-radius: 12px !important;
-        font-weight: 600 !important;
-        transition: all 0.3s ease !important;
-    }
-
-    .stTabs [data-baseweb="tab"]:hover {
-        background-color: rgba(255, 179, 71, 0.15) !important;
-        color: #ff8c00 !important;
-    }
-
-    .stTabs [aria-selected="true"] {
-        background: linear-gradient(135deg, #ffb347 0%, #98fb98 100%) !important;
-        color: #2c3e50 !important;
-        box-shadow: 0 4px 12px rgba(255, 179, 71, 0.3) !important;
-        transform: translateY(-1px) !important;
-    }
-
-    /* Enhanced Metrics */
-    .stMetric {
-        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%) !important;
-        border: 2px solid #e9ecef !important;
-        border-radius: 16px !important;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.08) !important;
-        padding: 1.5rem !important;
-        transition: all 0.3s ease !important;
-    }
-
-    .stMetric:hover {
-        transform: translateY(-4px) !important;
-        box-shadow: 0 8px 25px rgba(0,0,0,0.12) !important;
-        border-color: #98fb98 !important;
-    }
-
-    .stMetric .metric-value {
-        color: #32cd32 !important;
-        font-weight: 700 !important;
-        font-size: 1.5rem !important;
-    }
-
-    /* Enhanced Expanders */
-    .stExpander {
-        background-color: #ffffff !important;
-        border: 2px solid #e9ecef !important;
-        border-radius: 16px !important;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.08) !important;
-        margin-bottom: 1rem !important;
-        overflow: hidden !important;
-    }
-
-    .stExpander:hover {
-        border-color: #ffb347 !important;
-        box-shadow: 0 6px 20px rgba(0,0,0,0.12) !important;
-    }
-
-    .stExpander header {
-        background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%) !important;
-        border-radius: 16px 16px 0 0 !important;
-        padding: 1rem !important;
-        font-weight: 600 !important;
-    }
-
-    /* Enhanced Alerts */
-    .stAlert {
-        background: linear-gradient(135deg, #d1ecf1 0%, #bee5eb 100%) !important;
-        color: #0c5460 !important;
-        border: 2px solid #bee5eb !important;
-        border-radius: 12px !important;
-        padding: 1rem 1.5rem !important;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
-    }
-
-    /* Form Labels */
-    .stTextInput label, .stNumberInput label, .stTextArea label, .stSelectbox label, .stDateInput label {
-        color: #495057 !important;
-        font-weight: 600 !important;
-        font-size: 14px !important;
-        margin-bottom: 0.5rem !important;
-        letter-spacing: 0.3px !important;
-    }
-
-    /* Success/Error Messages */
-    .stSuccess {
-        background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%) !important;
-        color: #155724 !important;
-        border: 2px solid #c3e6cb !important;
-        border-radius: 12px !important;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
-    }
-
-    .stError {
-        background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%) !important;
-        color: #721c24 !important;
-        border: 2px solid #f5c6cb !important;
-        border-radius: 12px !important;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
-    }
-
-    /* Progress Bars */
-    .stProgress > div > div {
-        background: linear-gradient(135deg, #ffb347 0%, #98fb98 100%) !important;
-        border-radius: 10px !important;
-    }
-
-    /* Additional Text Elements */
-    .css-1v0mbdj, .css-1v0mbdj * {
-        color: #495057 !important;
-    }
-
-    .css-1d391kg, .css-1d391kg * {
-        color: #495057 !important;
-    }
-
-    [data-testid="stMarkdownContainer"] p {
-        color: #495057 !important;
-    }
-
-    [data-testid="stMarkdownContainer"] strong {
-        color: #1a1a2e !important;
-    }
-
-    /* Tab Content */
-    .stTabs [data-baseweb="tab-panel"] {
-        color: #495057 !important;
-        padding: 1.5rem 0 !important;
-    }
-
-    /* Form Help Text */
-    .stTextInput div small, .stNumberInput div small, .stTextArea div small {
-        color: #6c757d !important;
-        font-size: 13px !important;
-    }
-
-    /* Hide Sidebar */
-    section[data-testid="stSidebar"] {
-        display: none !important;
-    }
-
-    /* Full Width Content */
-    .main .block-container {
-        padding-left: 2.5rem !important;
-        padding-right: 2.5rem !important;
-    }
-
-    /* Logo Container Enhancement */
-    [data-testid="stImage"] {
-        border-radius: 16px !important;
-        overflow: hidden !important;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.08) !important;
-    }
-
-    /* Horizontal Rule Enhancement */
-    hr {
-        border: none !important;
-        height: 2px !important;
-        background: linear-gradient(90deg, transparent, #ffb347, #98fb98, transparent) !important;
-        margin: 2rem 0 !important;
-    }
-
-    /* Column Spacing */
-    [data-testid="column"] {
-        padding: 0.5rem !important;
-    }
-
-    /* Checkbox and Radio */
-    .stCheckbox, .stRadio {
-        color: #495057 !important;
-    }
-
-    .stCheckbox label, .stRadio label {
-        font-weight: 500 !important;
-    }
-
-    /* Divider Enhancement */
-    [data-testid="stHorizontalBlock"] {
-        margin: 1rem 0 !important;
-    }
-
-    /* Button Text Alignment - Prevent Wrapping */
-    .stButton button {
-        white-space: nowrap !important;
-        text-align: center !important;
-        word-wrap: normal !important;
-        overflow: hidden !important;
-        text-overflow: ellipsis !important;
-    }
-
-    /* Ensure button container doesn't cause wrapping */
-    [data-testid="stButton"] {
-        width: 100% !important;
-    }
-
-    [data-testid="stButton"] > button {
-        width: 100% !important;
-        min-width: fit-content !important;
-    }
+    elif not test_mode and DB_AVAILABLE:
+        # When a client is selected, automatically load their most recent certificate
+        # into the form the first time that client is chosen in this session.
+        selected_person_id = st.session_state.get("selected_person_id")
+        last_person_for_data = st.session_state.get("_last_person_for_data")
+
+        if selected_person_id and selected_person_id != last_person_for_data:
+            try:
+                summaries = list_certificates_for_person(selected_person_id, limit=1)
+            except Exception as exc:  # pragma: no cover - runtime defensive
+                st.sidebar.warning("Unable to auto-load last certificate for this client.")
+                st.sidebar.caption(str(exc))
+                st.session_state["_last_person_for_data"] = selected_person_id
+            else:
+                st.session_state["_last_person_for_data"] = selected_person_id
+                if summaries:
+                    latest = summaries[0]
+                    load_certificate_into_session(latest.id)
+                else:
+                    # No certificates yet for this client – start with a clean form.
+                    st.session_state.data = create_empty_networth_data()
+        elif selected_person_id is None and last_person_for_data is not None:
+            # Client deselected – reset to a clean form once.
+            st.session_state["_last_person_for_data"] = None
+            st.session_state.data = create_empty_networth_data()
+
+    # Apply custom CSS
+    st.markdown(f"<style>{LIGHT_THEME_CSS}</style>", unsafe_allow_html=True)
+    
+    # Add script to restore tab and scroll position on page load/rerun
+    restore_state_js = """
+    <script>
+    (function() {
+        function restoreState() {
+            try {
+                const mainWindow = window.parent !== window ? window.parent : window;
+                const mainDoc = mainWindow.document;
+                
+                // Restore scroll position
+                const savedScroll = mainWindow.sessionStorage.getItem('preserve_scroll');
+                if (savedScroll && mainWindow.scrollTo) {
+                    const pos = parseInt(savedScroll);
+                    mainWindow.scrollTo(0, pos);
+                }
+                
+                // Restore active tab
+                const savedTab = mainWindow.sessionStorage.getItem('preserve_tab');
+                if (savedTab) {
+                    const tabs = mainDoc.querySelectorAll('[data-baseweb="tab"], [role="tab"]');
+                    const tabIndex = parseInt(savedTab);
+                    if (tabs.length > tabIndex) {
+                        tabs[tabIndex].click();
+                    } else {
+                        // Fallback: find by text
+                        const tabLabels = mainDoc.querySelectorAll('[data-baseweb="tab"]');
+                        for (let tab of tabLabels) {
+                            const text = tab.textContent || tab.innerText || '';
+                            if (text.includes('Summary') || text.includes('Generate')) {
+                                tab.click();
+                                break;
+                            }
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error('State restore error:', e);
+            }
+        }
+        
+        // Try multiple times to ensure DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', restoreState);
+        } else {
+            setTimeout(restoreState, 100);
+            setTimeout(restoreState, 300);
+            setTimeout(restoreState, 600);
+        }
+    })();
+    </script>
     """
-
-    # Apply light theme CSS (always light mode)
-    st.markdown(f"<style>{light_theme_css}</style>", unsafe_allow_html=True)
+    # Use components.html to ensure script executes
+    st.components.v1.html(restore_state_js, height=0)
 
     # Enhanced branding with optiCERTIFICATE logo
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -1849,25 +390,25 @@ def main():
     # Initialize session state
     if 'data' not in st.session_state:
         st.session_state.data = NetWorthData(
-            individual_name="",
-            individual_address="",
             certificate_date=datetime.date.today().strftime("%d/%m/%Y"),
             engagement_date=datetime.date.today().strftime("%d/%m/%Y"),
             embassy_name="",
             embassy_address="",
-            passport_number=""
+            individuals=[
+                Individual(full_name="", passport_number="", address="")
+            ],
         )
     
     # For forward compatibility: ensure new fields exist on older session state objects
     new_fields = {
         'pf_accounts': [], 'deposits': [], 'nps_accounts': [], 'mutual_funds': [],
         'shares': [], 'vehicles': [], 'post_office_schemes': [], 'partnership_firms': [],
-        'passport_number': '',
         'bank_accounts_notes': '', 'insurance_policies_notes': '', 'pf_accounts_notes': '',
         'deposits_notes': '', 'nps_accounts_notes': '', 'mutual_funds_notes': '',
         'shares_notes': '', 'vehicles_notes': '', 'post_office_schemes_notes': '',
         'partnership_firms_notes': '', 'gold_holdings_notes': '', 'properties_notes': '',
-        'liabilities_notes': ''
+        'liabilities_notes': '',
+        'individuals': [],
     }
     for field, default_value in new_fields.items():
         if not hasattr(st.session_state.data, field):
@@ -1895,29 +436,63 @@ def main():
     # Tab 1: Basic Information
     with tabs[0]:
         st.header("Basic Information")
-        
+
         col1, col2 = st.columns(2)
-        
+
         with col1:
-            st.subheader("Personal Details")
-            st.session_state.data.individual_name = st.text_input(
-                "Individual's Full Name *", 
-                value=st.session_state.data.individual_name,
-                key="ind_name"
-            )
-            st.session_state.data.passport_number = st.text_input(
-                "Passport Number", 
-                value=st.session_state.data.passport_number,
-                key="passport_num",
-                help="Passport number will be displayed after the name in the certificate"
-            )
-            st.session_state.data.individual_address = st.text_area(
-                "Individual's Address *", 
-                value=st.session_state.data.individual_address,
-                height=100,
-                key="ind_addr"
-            )
-            
+            st.subheader("Individuals")
+
+            # Ensure we always have at least one individual entry
+            if not getattr(st.session_state.data, "individuals", None):
+                st.session_state.data.individuals = [
+                    Individual(full_name="", passport_number="", address="")
+                ]
+
+            # Render each individual in an expander with editable fields
+            for idx, individual in enumerate(st.session_state.data.individuals):
+                expanded = len(st.session_state.data.individuals) == 1
+                with st.expander(f"Individual {idx + 1}", expanded=expanded):
+                    name = st.text_input(
+                        "Full Name *",
+                        value=individual.full_name,
+                        key=f"individual_{idx}_name",
+                    )
+                    passport = st.text_input(
+                        "Passport Number *",
+                        value=individual.passport_number,
+                        key=f"individual_{idx}_passport",
+                        help="Passport number will be displayed after the name in the certificate",
+                    )
+                    address = st.text_area(
+                        "Address *",
+                        value=individual.address,
+                        height=100,
+                        key=f"individual_{idx}_address",
+                    )
+
+                    individual.full_name = name
+                    individual.passport_number = passport
+                    individual.address = address
+
+                    if len(st.session_state.data.individuals) > 1:
+                        if st.button(
+                            "🗑️ Remove Individual",
+                            key=f"remove_individual_{idx}",
+                            use_container_width=True,
+                        ):
+                            st.session_state.data.individuals.pop(idx)
+                            st.rerun()
+
+            if st.button(
+                "➕ Add Another Individual",
+                key="add_individual_button",
+                use_container_width=True,
+            ):
+                st.session_state.data.individuals.append(
+                    Individual(full_name="", passport_number="", address="")
+                )
+                st.rerun()
+
             st.subheader("Certificate Dates")
             cert_date = st.date_input("Certificate Date", value=datetime.date.today())
             st.session_state.data.certificate_date = cert_date.strftime("%d/%m/%Y")
@@ -1946,13 +521,12 @@ def main():
                 st.session_state.previous_currency = st.session_state.data.foreign_currency
             
             # Currency selection
-            currency_options = ["CAD", "USD", "EUR", "GBP", "AUD", "JPY", "CHF", "NZD", "SGD", "HKD"]
             current_currency = st.session_state.data.foreign_currency
-            default_index = currency_options.index(current_currency) if current_currency in currency_options else 0
+            default_index = SUPPORTED_CURRENCIES.index(current_currency) if current_currency in SUPPORTED_CURRENCIES else 0
             
             selected_currency = st.selectbox(
                 "Foreign Currency",
-                currency_options,
+                SUPPORTED_CURRENCIES,
                 index=default_index,
                 key="currency_selectbox"
             )
@@ -1967,26 +541,26 @@ def main():
                 
                 # Initialize exchange rate if not set
                 if not hasattr(st.session_state.data, 'exchange_rate') or st.session_state.data.exchange_rate == 0:
-                    st.session_state.data.exchange_rate = 63.34  # Default rate
+                    st.session_state.data.exchange_rate = DEFAULT_EXCHANGE_RATE
                 
                 # Auto-fetch when currency changes
                 if currency_changed:
                     # Fetch real-time exchange rate
-                    with st.spinner(f"Fetching real-time exchange rate for {selected_currency}..."):
+                    with st.spinner(f"Fetching exchange rate for {selected_currency}..."):
                         fetched_rate = fetch_exchange_rate(selected_currency)
                         if fetched_rate:
                             st.session_state.data.exchange_rate = fetched_rate
                             st.session_state.previous_currency = selected_currency
-                            st.success(f"✅ Exchange rate updated: {fetched_rate} INR = 1 {selected_currency}")
+                            st.success(f"Exchange rate updated: {fetched_rate} INR = 1 {selected_currency}")
                         else:
                             st.info(f"Using current rate: {st.session_state.data.exchange_rate} INR = 1 {selected_currency}")
                 
                 # Exchange rate input (editable)
-            st.session_state.data.exchange_rate = st.number_input(
+                st.session_state.data.exchange_rate = st.number_input(
                     f"Exchange Rate (INR to 1 {selected_currency})",
-                min_value=0.01,
+                    min_value=0.01,
                     value=st.session_state.data.exchange_rate,
-                step=0.01,
+                    step=0.01,
                     format="%.2f",
                     key="exchange_rate_input"
                 )
@@ -2024,7 +598,7 @@ def main():
             **Firm:** {st.session_state.data.ca_firm_name}
             **FRN:** {st.session_state.data.ca_frn}
             """)
-    
+
     # Tab 2: Bank Accounts
     with tabs[1]:
         st.header("Bank Accounts")
@@ -2198,7 +772,7 @@ def main():
             height=100,
             help="These notes will appear after the P.F. Accounts table in the generated certificate"
         )
-
+    
     # Tab 5: Deposits
     with tabs[4]:
         st.header("Deposits (FD, RD, etc.)")
@@ -2254,7 +828,7 @@ def main():
             height=100,
             help="These notes will appear after the Deposits table in the generated certificate"
         )
-
+    
     # Tab 6: NPS
     with tabs[5]:
         st.header("National Pension System (NPS)")
@@ -2558,7 +1132,6 @@ def main():
         
         st.subheader("Current Firm Investments")
         if st.session_state.data.partnership_firms:
-            # UI to display firms
             st.metric("Total Partnership Firm Investment (INR)", f"₹{st.session_state.data.total_partnership_firms_inr:,.2f}")
         else:
             st.info("No firm investments added yet")
@@ -2804,14 +1377,24 @@ def main():
         
         # Validation
         validation_errors = []
-        if not st.session_state.data.individual_name:
-            validation_errors.append("❌ Individual's name is required")
-        if not st.session_state.data.individual_address:
-            validation_errors.append("❌ Individual's address is required")
+        individuals = getattr(st.session_state.data, "individuals", [])
+        if not individuals:
+            validation_errors.append("❌ At least one individual is required")
+        else:
+            if any(not ind.full_name.strip() for ind in individuals):
+                validation_errors.append("❌ Each individual must have a full name")
+            if any(not ind.passport_number.strip() for ind in individuals):
+                validation_errors.append(
+                    "❌ Each individual must have a passport number"
+                )
+            if any(not ind.address.strip() for ind in individuals):
+                validation_errors.append("❌ Each individual must have an address")
         if not st.session_state.data.embassy_name:
             validation_errors.append("❌ Embassy/Consulate name is required")
         if len(st.session_state.data.bank_accounts) == 0 and len(st.session_state.data.properties) == 0:
             validation_errors.append("⚠️ Add at least one bank account or property")
+        if DB_AVAILABLE and not st.session_state.get("selected_person_id"):
+            validation_errors.append("❌ Select or create a client from the sidebar before generating")
         
         if validation_errors:
             st.error("Please complete the following:")
@@ -2824,6 +1407,12 @@ def main():
         st.markdown("---")
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
+            # Show success message if download was completed
+            if st.session_state.get('download_completed', False):
+                st.success("✅ Report Downloaded Successfully")
+                # Clear the flag
+                st.session_state.download_completed = False
+            
             if st.button("📄 Generate Net Worth Certificate", type="primary", use_container_width=True, disabled=bool(validation_errors)):
                 with st.spinner("Generating certificate..."):
                     try:
@@ -2835,18 +1424,197 @@ def main():
                         doc.save(doc_io)
                         doc_io.seek(0)
                         
-                        # Download button
-                        st.success("✅ Certificate generated successfully!")
-                        st.download_button(
-                            label="⬇️ Download Certificate (DOCX)",
-                            data=doc_io.getvalue(),
-                            file_name=f"NetWorth_Certificate_{st.session_state.data.individual_name.replace(' ', '_')}_{datetime.date.today().strftime('%Y%m%d')}.docx",
-                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                            use_container_width=True
-                        )
+                        # Store in session state for auto-download
+                        primary_name = ""
+                        if st.session_state.data.individuals:
+                            primary_name = (
+                                st.session_state.data.individuals[0]
+                                .full_name.replace(" ", "_")
+                            )
+                        file_name = f"NetWorth_Certificate_{primary_name}_{datetime.date.today().strftime('%Y%m%d')}.docx"
+                        certificate_bytes = doc_io.getvalue()
+
+                        if DB_AVAILABLE:
+                            try:
+                                saved_record = save_certificate(
+                                    st.session_state.data,
+                                    person_id=st.session_state.get("selected_person_id"),
+                                    document_bytes=certificate_bytes,
+                                    document_file_name=file_name,
+                                    extra_metadata={"source": "streamlit_app"},
+                                )
+                                st.session_state.last_saved_certificate_id = saved_record.id
+                                st.session_state["_show_save_notice"] = True
+                                st.session_state.selected_certificate_id = saved_record.id
+                            except RepositoryError as repo_err:
+                                st.warning(f"Document generated, but saving to the database failed: {repo_err}")
+                            except Exception as db_exc:  # pragma: no cover - defensive
+                                st.warning(f"Document generated, but storing it failed: {db_exc}")
+                        
+                        # Encode to base64 for JavaScript download
+                        b64_data = base64.b64encode(certificate_bytes).decode()
+                        filename_json = json.dumps(file_name)
+                        
+                        # Show success message immediately
+                        st.success("✅ Report Downloaded Successfully")
+                        
+                        # Trigger download directly via JavaScript
+                        # Save scroll position and tab state, then trigger download immediately
+                        download_js = f"""
+                        <script>
+                        (function() {{
+                            try {{
+                                // Get the main window (not iframe)
+                                const mainWindow = window.parent !== window ? window.parent : window;
+                                const mainDoc = mainWindow.document;
+                                
+                                // Save scroll position BEFORE any operations
+                                const savedScroll = mainWindow.pageYOffset || mainDoc.documentElement.scrollTop;
+                                if (savedScroll > 0) {{
+                                    mainWindow.sessionStorage.setItem('preserve_scroll', savedScroll.toString());
+                                }}
+                                
+                                // Save active tab (Summary & Generate is the last tab, index 14)
+                                // We want to stay on this tab after rerun
+                                mainWindow.sessionStorage.setItem('preserve_tab', '14');
+                                
+                                // Function to convert base64 to blob
+                                function base64ToBlob(base64, mimeType) {{
+                                    const byteCharacters = atob(base64);
+                                    const byteNumbers = new Array(byteCharacters.length);
+                                    for (let i = 0; i < byteCharacters.length; i++) {{
+                                        byteNumbers[i] = byteCharacters.charCodeAt(i);
+                                    }}
+                                    const byteArray = new Uint8Array(byteNumbers);
+                                    return new Blob([byteArray], {{ type: mimeType }});
+                                }}
+                                
+                                // Function to trigger download
+                                function doDownload() {{
+                                    try {{
+                                        const data = {json.dumps(b64_data)};
+                                        const filename = {filename_json};
+                                        const blob = base64ToBlob(data, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+                                        const url = mainWindow.URL.createObjectURL(blob);
+                                        const a = mainDoc.createElement('a');
+                                        a.href = url;
+                                        a.download = filename;
+                                        a.style.display = 'none';
+                                        
+                                        // Ensure body exists
+                                        if (!mainDoc.body) {{
+                                            console.error('Document body not found');
+                                            return;
+                                        }}
+                                        
+                                        mainDoc.body.appendChild(a);
+                                        a.click();
+                                        
+                                        // Cleanup after download starts
+                                        setTimeout(function() {{
+                                            if (mainDoc.body.contains(a)) {{
+                                                mainDoc.body.removeChild(a);
+                                            }}
+                                            mainWindow.URL.revokeObjectURL(url);
+                                        }}, 200);
+                                        
+                                    }} catch (e) {{
+                                        console.error('Download error:', e);
+                                    }}
+                                }}
+                                
+                                // Function to restore scroll position
+                                function restoreScroll() {{
+                                    try {{
+                                        const saved = mainWindow.sessionStorage.getItem('preserve_scroll');
+                                        if (saved && mainWindow.scrollTo) {{
+                                            const pos = parseInt(saved);
+                                            mainWindow.scrollTo(0, pos);
+                                            // Keep trying to restore scroll for a bit (in case of delayed rerender)
+                                            let attempts = 0;
+                                            const restoreInterval = setInterval(function() {{
+                                                attempts++;
+                                                const currentScroll = mainWindow.pageYOffset || mainDoc.documentElement.scrollTop;
+                                                if (Math.abs(currentScroll - pos) > 10 && attempts < 10) {{
+                                                    mainWindow.scrollTo(0, pos);
+                                                }} else {{
+                                                    clearInterval(restoreInterval);
+                                                    mainWindow.sessionStorage.removeItem('preserve_scroll');
+                                                }}
+                                            }}, 100);
+                                        }}
+                                    }} catch (e) {{
+                                        console.error('Scroll restore error:', e);
+                                    }}
+                                }}
+                                
+                                // Execute download immediately if body is ready
+                                if (mainDoc.body) {{
+                                    doDownload();
+                                    // Restore scroll after a short delay
+                                    setTimeout(restoreScroll, 50);
+                                }} else {{
+                                    // Wait for body to be ready
+                                    mainWindow.addEventListener('DOMContentLoaded', function() {{
+                                        doDownload();
+                                        setTimeout(restoreScroll, 50);
+                                    }});
+                                }}
+                                
+                                // Function to restore active tab
+                                function restoreTab() {{
+                                    try {{
+                                        const savedTab = mainWindow.sessionStorage.getItem('preserve_tab');
+                                        if (savedTab) {{
+                                            // Find Streamlit tabs and click the saved one
+                                            const tabs = mainDoc.querySelectorAll('[data-baseweb="tab"], [role="tab"]');
+                                            const tabIndex = parseInt(savedTab);
+                                            if (tabs.length > tabIndex) {{
+                                                tabs[tabIndex].click();
+                                            }} else {{
+                                                // Alternative: find by text content
+                                                const tabLabels = mainDoc.querySelectorAll('[data-baseweb="tab"]');
+                                                for (let tab of tabLabels) {{
+                                                    const text = tab.textContent || tab.innerText || '';
+                                                    if (text.includes('Summary') || text.includes('Generate')) {{
+                                                        tab.click();
+                                                        break;
+                                                    }}
+                                                }}
+                                            }}
+                                        }}
+                                    }} catch (e) {{
+                                        console.error('Tab restore error:', e);
+                                    }}
+                                }}
+                                
+                                // Also set up scroll restoration for page reruns
+                                setTimeout(restoreScroll, 100);
+                                setTimeout(restoreScroll, 300);
+                                setTimeout(restoreScroll, 500);
+                                
+                                // Restore tab after rerun
+                                setTimeout(restoreTab, 150);
+                                setTimeout(restoreTab, 400);
+                                setTimeout(restoreTab, 700);
+                                
+                            }} catch (e) {{
+                                console.error('Script execution error:', e);
+                            }}
+                        }})();
+                        </script>
+                        """
+                        
+                        # Inject JavaScript - this executes immediately in the same render cycle
+                        st.components.v1.html(download_js, height=0)
+                        
                     except Exception as e:
                         st.error(f"Error generating certificate: {str(e)}")
                         st.exception(e)
+
+        if st.session_state.pop("_show_save_notice", False):
+            saved_id = st.session_state.get("last_saved_certificate_id", "")
+            st.info(f"Certificate saved to the database. Reference ID: {saved_id}")
 
 if __name__ == "__main__":
     main()
